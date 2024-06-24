@@ -1,6 +1,11 @@
+interface EffectOption {
+  scheduler?(effectFn: EffectFn): void
+}
+
 interface EffectFn {
   (): void
   deps?: Array<Set<EffectFn>>
+  options?: EffectOption
 }
 
 type Key = string | symbol
@@ -35,7 +40,7 @@ const cleanup = (effectFn: EffectFn) => {
 let activeEffect: EffectFn
 // effect 栈，用来存储嵌套 effectFn
 const effectStack: Array<EffectFn> = []
-const effect = (fn: EffectFn) => {
+const effect = (fn: EffectFn, options: EffectOption = {}) => {
   const effectFn = () => {
     cleanup(effectFn)
     activeEffect = effectFn
@@ -49,6 +54,7 @@ const effect = (fn: EffectFn) => {
     activeEffect = effectStack[effectStack.length - 1]
   }
 
+  effectFn.options = options
   // 用来存储所有与该副作用函数相关联的依赖集合
   effectFn.deps = []
   effectFn()
@@ -93,7 +99,14 @@ const trigger = (target: Target, key: Key) => {
     }
   })
 
-  effectsToRun.forEach(effectFn => effectFn())
+  effectsToRun.forEach(effectFn => {
+    // 如果副作用函数存在调度器，则调用该调度器
+    if (effectFn.options?.scheduler) {
+      effectFn.options.scheduler(effectFn)
+    } else {
+      effectFn()
+    }
+  })
 }
 
 const data = { ok: true, text: 'hello', count: 0 }
@@ -115,8 +128,20 @@ const obj = new Proxy(data, {
   },
 })
 
-effect(() => {
-  console.log('effectFn1 run')
+effect(
+  () => {
+    console.log('effectFn1 run')
 
-  obj.count++
-})
+    obj.count
+  },
+  {
+    scheduler(effectFn) {
+      setTimeout(() => {
+        effectFn()
+      }, 1000)
+    },
+  },
+)
+
+obj.count++
+console.log('finished')
