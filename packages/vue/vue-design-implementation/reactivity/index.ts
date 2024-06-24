@@ -1,6 +1,12 @@
-interface EffectOption {
+interface EffectOptions {
+  /**
+   * 懒执行
+   */
   lazy?: boolean
 
+  /**
+   * 调度器
+   */
   scheduler?(effectFn: Effect): void
 }
 
@@ -9,7 +15,7 @@ type EffectFn = () => any
 interface Effect {
   (): any
   deps?: Array<Set<Effect>>
-  options?: EffectOption
+  options?: EffectOptions
 }
 
 type Key = string | symbol
@@ -44,7 +50,7 @@ const cleanup = (effectFn: Effect) => {
 let activeEffect: Effect
 // effect 栈，用来存储嵌套 effectFn
 const effectStack: Array<EffectFn> = []
-const effect = (fn: EffectFn, options: EffectOption = {}) => {
+const effect = (fn: EffectFn, options: EffectOptions = {}) => {
   const effectFn = () => {
     cleanup(effectFn)
     activeEffect = effectFn
@@ -103,6 +109,80 @@ const computed = (getter: EffectFn) => {
   }
 
   return computedObj
+}
+
+/**
+ * 递归遍历 value 中的所有属性
+ */
+const traverse = (value: any, seen = new Set()) => {
+  if (typeof value !== 'object' || value === null || seen.has(value)) return
+
+  seen.add(value)
+  for (const key in value) {
+    traverse(value[key], seen)
+  }
+
+  return value
+}
+
+interface WatchOptions {
+  /**
+   * 立即执行
+   */
+  immediate?: boolean
+
+  /**
+   * 执行时机
+   */
+  flush?: 'pre' | 'post' | 'sync'
+}
+
+const watch = (source: any, cb: (newValue, oldValue, onInvalidate) => void, options: WatchOptions = {}) => {
+  let getter: () => any
+  // 函数的形式指定监听特定的值
+  if (typeof source === 'function') {
+    getter = source
+  } else {
+    getter = () => traverse(source)
+  }
+
+  // 记录新旧值
+  let oldValue: any
+  let newValue: any
+
+  // cleanup 用于存储用户的过期回调
+  let cleanup: () => void
+  const onInvalidate = (fn: () => void) => {
+    cleanup = fn
+  }
+
+  const job = () => {
+    // 执行过期回调
+    cleanup?.()
+
+    // 重新执行副作用函数拿到最新值
+    newValue = effectFn()
+    cb(newValue, oldValue, onInvalidate)
+    oldValue = newValue
+  }
+
+  const effectFn = effect(() => getter(), {
+    lazy: true,
+    scheduler() {
+      if (options.flush === 'post') {
+        Promise.resolve().then(job)
+      } else {
+        job()
+      }
+    },
+  })
+
+  if (options.immediate) {
+    job()
+  } else {
+    // 手动调用副作用函数，拿到初始值
+    oldValue = effectFn()
+  }
 }
 
 /**
@@ -175,9 +255,16 @@ const obj = new Proxy(data, {
 
 const sum = computed(() => (obj.ok ? obj.text.length : 0))
 
-effect(() => console.log(`+${sum.value}`))
+watch(obj, () => {
+  console.log('obj changed')
+})
 
-console.log(sum.value)
-obj.ok = false
-console.log(sum.value)
+watch(
+  () => obj.count,
+  (newValue, oldValue) => {
+    console.log('obj count changed', newValue, oldValue)
+  },
+)
+
 console.log('finished')
+obj.count = 2
