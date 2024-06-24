@@ -33,12 +33,20 @@ const cleanup = (effectFn: EffectFn) => {
 
 // 全局变量存储被注册的副作用函数
 let activeEffect: EffectFn
+// effect 栈，用来存储嵌套 effectFn
+const effectStack: Array<EffectFn> = []
 const effect = (fn: EffectFn) => {
   const effectFn = () => {
     cleanup(effectFn)
     activeEffect = effectFn
+    // 在调用副作用函数前，将当前副作用函数压入栈中
+    effectStack.push(effectFn)
     // 执行函数以被Proxy拦截，进行追踪操作
     fn()
+    // 在函数执行完毕后，将当前副作用函数弹出栈
+    effectStack.pop()
+    // 恢复之前的 effectFn 值
+    activeEffect = effectStack[effectStack.length - 1]
   }
 
   // 用来存储所有与该副作用函数相关联的依赖集合
@@ -101,13 +109,15 @@ const obj = new Proxy(data, {
 })
 
 effect(() => {
-  console.log(obj.ok ? obj.text : 'not')
+  console.log('effectFn1 run')
+
+  effect(() => {
+    console.log('effectFn2 run')
+    obj.text
+  })
+
+  obj.ok
 })
 
-setTimeout(() => {
-  obj.text = '200'
-}, 1100)
-
-setTimeout(() => {
-  obj.ok = false
-}, 1000)
+obj.ok = false
+// obj.text = '123'
