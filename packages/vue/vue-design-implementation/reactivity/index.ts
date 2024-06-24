@@ -85,11 +85,18 @@ const trigger = (target: Target, key: Key) => {
   if (!depsMap) return true
   const effects = depsMap.get(key)
 
-  const effectsToRun = new Set<EffectFn>(effects)
-  effectsToRun?.forEach(fn => fn())
+  const effectsToRun = new Set<EffectFn>()
+  effects?.forEach(effectFn => {
+    // 如果 trigger 触发的 effectFn 与当前正在执行的副作用函数相同，则不触发执行
+    if (effectFn !== activeEffect) {
+      effectsToRun.add(effectFn)
+    }
+  })
+
+  effectsToRun.forEach(effectFn => effectFn())
 }
 
-const data = { ok: true, text: 'hello' }
+const data = { ok: true, text: 'hello', count: 0 }
 
 const obj = new Proxy(data, {
   get(target, key, receiver) {
@@ -111,13 +118,5 @@ const obj = new Proxy(data, {
 effect(() => {
   console.log('effectFn1 run')
 
-  effect(() => {
-    console.log('effectFn2 run')
-    obj.text
-  })
-
-  obj.ok
+  obj.count++
 })
-
-obj.ok = false
-// obj.text = '123'
