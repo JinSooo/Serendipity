@@ -1,4 +1,7 @@
-type EffectFn = () => void
+interface EffectFn {
+  (): void
+  deps?: Array<Set<EffectFn>>
+}
 
 type Key = string | symbol
 
@@ -20,12 +23,27 @@ type Target = object
  */
 const bucket = new WeakMap<Target, Map<Key, Set<EffectFn>>>()
 
+// 清除副作用函数依赖
+const cleanup = (effectFn: EffectFn) => {
+  effectFn.deps!.forEach(deps => {
+    deps.delete(effectFn)
+  })
+  effectFn.deps!.length = 0
+}
+
 // 全局变量存储被注册的副作用函数
 let activeEffect: EffectFn
 const effect = (fn: EffectFn) => {
-  activeEffect = fn
-  // 执行函数以被Proxy拦截，进行追踪操作
-  fn()
+  const effectFn = () => {
+    cleanup(effectFn)
+    activeEffect = effectFn
+    // 执行函数以被Proxy拦截，进行追踪操作
+    fn()
+  }
+
+  // 用来存储所有与该副作用函数相关联的依赖集合
+  effectFn.deps = []
+  effectFn()
 }
 
 /**
@@ -46,7 +64,9 @@ const track = (target: Target, key: Key) => {
     depsMap.set(key, deps)
   }
 
+  // 添加副作用函数到 deps 和 activeEffect.deps 集合
   deps.add(activeEffect)
+  activeEffect.deps!.push(deps)
 }
 
 /**
@@ -56,7 +76,9 @@ const trigger = (target: Target, key: Key) => {
   const depsMap = bucket.get(target)
   if (!depsMap) return true
   const effects = depsMap.get(key)
-  effects?.forEach(fn => fn())
+
+  const effectsToRun = new Set<EffectFn>(effects)
+  effectsToRun?.forEach(fn => fn())
 }
 
 const data = { ok: true, text: 'hello' }
@@ -79,11 +101,12 @@ const obj = new Proxy(data, {
 })
 
 effect(() => {
-  console.log(obj.ok)
+  console.log(obj.ok ? obj.text : 'not')
 })
-effect(() => {
-  console.log(obj.text)
-})
+
+setTimeout(() => {
+  obj.text = '200'
+}, 1100)
 
 setTimeout(() => {
   obj.ok = false
