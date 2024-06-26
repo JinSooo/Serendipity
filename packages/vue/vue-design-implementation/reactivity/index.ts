@@ -273,53 +273,80 @@ const data = { ok: true, text: 'hello', count: 0 }
  *
  * 最后通过 Reflect.get 的第三个参数 receiver，去控制谁在读取属性
  */
-const obj = new Proxy(data, {
-  get(target, key, receiver) {
-    if (!activeEffect) return
+const reactive = (obj: any) => {
+  return new Proxy(data, {
+    get(target, key, receiver) {
+      // 代理对象通过 raw 访问原始对象
+      if (key === 'raw') {
+        return target
+      }
 
-    track(target, key)
+      if (!activeEffect) return
 
-    return Reflect.get(target, key, receiver)
-  },
-  set(target, key, newValue, receiver) {
-    // 如果存在该属性，则类型为设置，反之为添加
-    const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
-    const res = Reflect.set(target, key, newValue, receiver)
+      track(target, key)
 
-    trigger(target, key, type)
+      return Reflect.get(target, key, receiver)
+    },
+    set(target, key, newValue, receiver) {
+      const oldValue = target[key]
+      // 如果存在该属性，则类型为设置，反之为添加
+      const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
+      const res = Reflect.set(target, key, newValue, receiver)
 
-    return res
-  },
-  /**
-   * 拦截 in、
-   */
-  has(target, key) {
-    track(target, key)
+      /**
+       *  对于两个响应式对象，并通过 Object.setPrototypeOf(child, parent) 建立联系后
+       *  如果 child 设置 parent 上的属性时，会触发 effect 的两次响应
+       *  因为 child 和 parent 上分别 trigger 了一次，但这并不是 child 上的属性，而是代理对象 parent 的
+       *  故可以通过 receiver 和 target 的判断，是否为原始对象的属性，进行甄别
+       */
+      if (target === receiver.raw) {
+        /**
+         *  值没有发生变化时，不需要触发响应
+         *  特殊处理 NaN
+         *  - NaN === NaN（false）
+         *  - NaN !== NaN（true）
+         */
+        // biome-ignore lint/suspicious/noSelfCompare: <NaN>
+        if (oldValue !== newValue && (oldValue === oldValue || newValue === newValue)) {
+          trigger(target, key, type)
+        }
+      }
 
-    return Reflect.has(target, key)
-  },
-  /**
-   * 拦截 for...in、
-   */
-  ownKeys(target) {
-    track(target, ITERATE_KEY)
+      return res
+    },
+    /**
+     * 拦截 in、
+     */
+    has(target, key) {
+      track(target, key)
 
-    return Reflect.ownKeys(target)
-  },
-  /**
-   * 拦截 delete、
-   */
-  deleteProperty(target, key) {
-    const hasKey = Object.prototype.hasOwnProperty.call(target, key)
-    const res = Reflect.deleteProperty(target, key)
+      return Reflect.has(target, key)
+    },
+    /**
+     * 拦截 for...in、
+     */
+    ownKeys(target) {
+      track(target, ITERATE_KEY)
 
-    if (res && hasKey) {
-      trigger(target, key, TriggerType.DEL)
-    }
+      return Reflect.ownKeys(target)
+    },
+    /**
+     * 拦截 delete、
+     */
+    deleteProperty(target, key) {
+      const hasKey = Object.prototype.hasOwnProperty.call(target, key)
+      const res = Reflect.deleteProperty(target, key)
 
-    return res
-  },
-})
+      if (res && hasKey) {
+        trigger(target, key, TriggerType.DEL)
+      }
+
+      return res
+    },
+  })
+}
+
+const obj = reactive(data)
 
 effect(() => {
   for (const key in obj) {
