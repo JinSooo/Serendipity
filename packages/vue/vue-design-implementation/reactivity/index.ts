@@ -236,20 +236,36 @@ const trigger = (target: Target, key: Key) => {
 
 const data = { ok: true, text: 'hello', count: 0 }
 
+/**
+ * Reflect 方式和 原生获取(target[key]) 的区别
+ * @example 以这个对象为例子
+ *  const obj = {
+ *    foo: 1,
+ *    get bar() {
+ *      return this.foo
+ *    }
+ *  }
+ * @desc
+ * - 当代理对象p后，在effect中调用 p.bar，会发现并没有建立联系，因为 p.bar 内部会调用 this.foo，
+ *   导致最终获取的方式为 obj.foo，即原始对象的属性，并不是代理对象的
+ *   最终导致既不能建立联系，也不能响应
+ *
+ * 最后通过 Reflect.get 的第三个参数 receiver，去控制谁在读取属性
+ */
 const obj = new Proxy(data, {
   get(target, key, receiver) {
     if (!activeEffect) return
 
     track(target, key)
 
-    return target[key]
+    return Reflect.get(target, key, receiver)
   },
   set(target, key, newValue, receiver) {
     target[key] = newValue
 
     trigger(target, key)
 
-    return true
+    return Reflect.set(target, key, newValue, receiver)
   },
 })
 
