@@ -22,6 +22,15 @@ type Key = string | symbol
 
 type Target = object
 
+enum TriggerType {
+  SET = 'SET',
+  ADD = 'ADD',
+  DEL = 'DEL',
+}
+
+// ownKeys 获取一个对象的所有键值，不和任何键绑定，故设置一个唯一标识
+const ITERATE_KEY = Symbol()
+
 /**
  * bucket (WeakMap)
  *   |
@@ -88,7 +97,7 @@ const computed = (getter: EffectFn) => {
     scheduler(effectFn) {
       dirty = true
       // 手动调用触发响应
-      trigger(computedObj, 'value')
+      trigger(computedObj, 'value', TriggerType.SET)
       effectFn()
     },
   })
@@ -211,10 +220,11 @@ const track = (target: Target, key: Key) => {
 /**
  * 拦截 target 中 key 的修改，并触发变化 effect
  */
-const trigger = (target: Target, key: Key) => {
+const trigger = (target: Target, key: Key, type: TriggerType) => {
   const depsMap = bucket.get(target)
   if (!depsMap) return true
   const effects = depsMap.get(key)
+  const iterateEffects = depsMap.get(ITERATE_KEY)
 
   const effectsToRun = new Set<Effect>()
   effects?.forEach(effectFn => {
@@ -223,6 +233,17 @@ const trigger = (target: Target, key: Key) => {
       effectsToRun.add(effectFn)
     }
   })
+
+  // 对于 ITERATE_KEY 来说，仅用在添加属性活删除属性的时候，for...in的输出才会发生改变，才需要重新执行其副作用函数
+  if (type === TriggerType.ADD || type === TriggerType.DEL) {
+    // 获取与 ITERATE_KEY 相关的副作用函数
+    iterateEffects?.forEach(effectFn => {
+      // 如果 trigger 触发的 effectFn 与当前正在执行的副作用函数相同，则不触发执行
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn)
+      }
+    })
+  }
 
   effectsToRun.forEach(effectFn => {
     // 如果副作用函数存在调度器，则调用该调度器
@@ -261,26 +282,49 @@ const obj = new Proxy(data, {
     return Reflect.get(target, key, receiver)
   },
   set(target, key, newValue, receiver) {
-    target[key] = newValue
+    // 如果存在该属性，则类型为设置，反之为添加
+    const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
+    const res = Reflect.set(target, key, newValue, receiver)
 
-    trigger(target, key)
+    trigger(target, key, type)
 
-    return Reflect.set(target, key, newValue, receiver)
+    return res
+  },
+  /**
+   * 拦截 in、
+   */
+  has(target, key) {
+    track(target, key)
+
+    return Reflect.has(target, key)
+  },
+  /**
+   * 拦截 for...in、
+   */
+  ownKeys(target) {
+    track(target, ITERATE_KEY)
+
+    return Reflect.ownKeys(target)
+  },
+  /**
+   * 拦截 delete、
+   */
+  deleteProperty(target, key) {
+    const hasKey = Object.prototype.hasOwnProperty.call(target, key)
+    const res = Reflect.deleteProperty(target, key)
+
+    if (res && hasKey) {
+      trigger(target, key, TriggerType.DEL)
+    }
+
+    return res
   },
 })
 
-const sum = computed(() => (obj.ok ? obj.text.length : 0))
-
-watch(obj, () => {
-  console.log('obj changed')
+effect(() => {
+  for (const key in obj) {
+    console.log(key)
+  }
 })
 
-watch(
-  () => obj.count,
-  (newValue, oldValue) => {
-    console.log('obj count changed', newValue, oldValue)
-  },
-)
-
-console.log('finished')
-obj.count = 2
+obj.c = false
