@@ -1,14 +1,13 @@
 import { effect } from './effect'
 import { reactive } from './reactive'
 
-const data = { ok: true, text: 'hello', count: 0 }
+const data = { ok: true, text: 'hello', count: 0, foo: { test: true } }
 
 const obj = reactive(data)
+// const obj = shallowReactive(data)
 
 effect(() => {
-  for (const key in obj) {
-    console.log(key)
-  }
+  console.log(obj.foo.test)
 })
 
-obj.c = false
+obj.foo.test = false

@@ -90,19 +90,32 @@ export const trigger = (target: Target, key: Key, type: TriggerType) => {
  *
  * 最后通过 Reflect.get 的第三个参数 receiver，去控制谁在读取属性
  */
-export const reactive = (obj: any) => {
-  return new Proxy(obj, {
+/**
+ * 创建响应式对象
+ * @param obj 代理对象
+ * @param isShallow 浅响应
+ */
+const createReactive = <T extends object>(obj: T, isShallow = false) => {
+  return new Proxy<T>(obj, {
     get(target, key, receiver) {
       // 代理对象通过 raw 访问原始对象
       if (key === 'raw') {
         return target
       }
 
-      if (!activeEffect) return
-
       track(target, key)
 
-      return Reflect.get(target, key, receiver)
+      const res = Reflect.get(target, key, receiver)
+      // 浅响应
+      if (isShallow) {
+        return res
+      }
+      // 实现深响应
+      if (typeof res === 'object' && res !== null) {
+        return reactive(res)
+      }
+
+      return res
     },
     set(target, key, newValue, receiver) {
       const oldValue = target[key]
@@ -161,4 +174,20 @@ export const reactive = (obj: any) => {
       return res
     },
   })
+}
+
+/**
+ * 创建响应式对象
+ * @param obj 代理对象
+ */
+export const reactive = <T extends object>(obj: T) => {
+  return createReactive<T>(obj)
+}
+
+/**
+ * 创建浅响应式对象
+ * @param obj 代理对象
+ */
+export const shallowReactive = <T extends object>(obj: T) => {
+  return createReactive<T>(obj, true)
 }
