@@ -1,9 +1,9 @@
 import { effect } from './effect'
-import { reactive } from './reactive'
+import { readonly } from './reactive'
 
 const data = { ok: true, text: 'hello', count: 0, foo: { test: true } }
 
-const obj = reactive(data)
+const obj = readonly(data)
 // const obj = shallowReactive(data)
 
 effect(() => {

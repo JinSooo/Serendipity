@@ -94,8 +94,9 @@ export const trigger = (target: Target, key: Key, type: TriggerType) => {
  * 创建响应式对象
  * @param obj 代理对象
  * @param isShallow 浅响应
+ * @param isReadonly 只读
  */
-const createReactive = <T extends object>(obj: T, isShallow = false) => {
+const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly = false) => {
   return new Proxy<T>(obj, {
     get(target, key, receiver) {
       // 代理对象通过 raw 访问原始对象
@@ -103,7 +104,10 @@ const createReactive = <T extends object>(obj: T, isShallow = false) => {
         return target
       }
 
-      track(target, key)
+      // 非只读情况下才需要建立响应联系
+      if (!isReadonly) {
+        track(target, key)
+      }
 
       const res = Reflect.get(target, key, receiver)
       // 浅响应
@@ -112,12 +116,19 @@ const createReactive = <T extends object>(obj: T, isShallow = false) => {
       }
       // 实现深响应
       if (typeof res === 'object' && res !== null) {
-        return reactive(res)
+        // 深只读
+        return isReadonly ? readonly(res) : reactive(res)
       }
 
       return res
     },
     set(target, key, newValue, receiver) {
+      // 只读
+      if (isReadonly) {
+        console.warn(`property ${String(key)} is readonly!`)
+        return true
+      }
+
       const oldValue = target[key]
       // 如果存在该属性，则类型为设置，反之为添加
       const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
@@ -190,4 +201,20 @@ export const reactive = <T extends object>(obj: T) => {
  */
 export const shallowReactive = <T extends object>(obj: T) => {
   return createReactive<T>(obj, true)
+}
+
+/**
+ * 创建响应式只读对象
+ * @param obj 代理对象
+ */
+export const readonly = <T extends object>(obj: T) => {
+  return createReactive<T>(obj, false, true)
+}
+
+/**
+ * 创建浅响应式只读对象
+ * @param obj 代理对象
+ */
+export const shallowReadonly = <T extends object>(obj: T) => {
+  return createReactive<T>(obj, true, true)
 }
