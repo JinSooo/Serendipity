@@ -13,11 +13,46 @@ export enum TriggerType {
 // ownKeys 获取一个对象的所有键值，不和任何键绑定，故设置一个唯一标识
 const ITERATE_KEY = Symbol()
 
+// 存储原始对象到代理对象的映射
+const reactiveMap = new Map()
+
+// 重写数组的方法以触发响应式
+const arrayInstrumentations = {}
+;['includes', 'indexOf', 'lastIndexOf'].forEach(method => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    let res = originMethod.apply(this, args)
+
+    if (res === false) {
+      // 通过this.raw拿到原生对象去调用查找
+      res = originMethod.apply(this.raw, args)
+    }
+
+    return res
+  }
+})
+
+// 标记变量，代表是否进行追踪
+let shouldTrack = true
+/**
+ * 对于 push 等方法，会间接的读取 length 属性，故要屏蔽对 length 的读取
+ */
+;['push', 'pop', 'shift', 'unshift', 'splice'].forEach(method => {
+  const originMethod = Array.prototype[method]
+  arrayInstrumentations[method] = function (...args) {
+    shouldTrack = false
+    const res = originMethod.apply(this, args)
+    shouldTrack = true
+    return res
+  }
+})
+
 /**
  * 追踪 target 中 key 的变化 effect
  */
 export const track = (target: Target, key: Key) => {
-  if (!activeEffect) return
+  // 禁止追踪，则直接返回
+  if (!activeEffect || !shouldTrack) return
 
   let depsMap = bucket.get(target)
   if (!depsMap) {
@@ -39,11 +74,10 @@ export const track = (target: Target, key: Key) => {
 /**
  * 拦截 target 中 key 的修改，并触发变化 effect
  */
-export const trigger = (target: Target, key: Key, type: TriggerType) => {
+export const trigger = (target: Target, key: Key, type: TriggerType, newVal?: any) => {
   const depsMap = bucket.get(target)
   if (!depsMap) return true
   const effects = depsMap.get(key)
-  const iterateEffects = depsMap.get(ITERATE_KEY)
 
   const effectsToRun = new Set<Effect>()
   effects?.forEach(effectFn => {
@@ -55,11 +89,35 @@ export const trigger = (target: Target, key: Key, type: TriggerType) => {
 
   // 对于 ITERATE_KEY 来说，仅用在添加属性活删除属性的时候，for...in的输出才会发生改变，才需要重新执行其副作用函数
   if (type === TriggerType.ADD || type === TriggerType.DEL) {
+    const iterateEffects = depsMap.get(ITERATE_KEY)
     // 获取与 ITERATE_KEY 相关的副作用函数
     iterateEffects?.forEach(effectFn => {
       // 如果 trigger 触发的 effectFn 与当前正在执行的副作用函数相同，则不触发执行
       if (effectFn !== activeEffect) {
         effectsToRun.add(effectFn)
+      }
+    })
+  }
+
+  // 当type为ADD并将目标对象为数组时，需要取出length属性相关联的副作用函数
+  if (type === TriggerType.ADD && Array.isArray(target)) {
+    const lengthEffects = depsMap.get('length')
+    lengthEffects?.forEach(effectFn => {
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn)
+      }
+    })
+  }
+
+  // 当目标对象为数组并修改属性length时，对于索引大于或等于新的length值的副作用取出来
+  if (type === TriggerType.ADD && Array.isArray(target)) {
+    depsMap.forEach((effects, key) => {
+      if (Number(key) >= newVal) {
+        effects?.forEach(effectFn => {
+          if (effectFn !== activeEffect) {
+            effectsToRun.add(effectFn)
+          }
+        })
       }
     })
   }
@@ -104,8 +162,14 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
         return target
       }
 
+      // 如果目标对象是数组，并key存在于arrayInstrumentations上，则返回arrayInstrumentations上的值
+      if (Array.isArray(target) && Object.hasOwnProperty.call(arrayInstrumentations, key)) {
+        return Reflect.get(arrayInstrumentations, key, receiver)
+      }
+
       // 非只读情况下才需要建立响应联系
-      if (!isReadonly) {
+      // symbol内建属性，不建立联系
+      if (!isReadonly && typeof key !== 'symbol') {
         track(target, key)
       }
 
@@ -130,8 +194,15 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
       }
 
       const oldValue = target[key]
-      // 如果存在该属性，则类型为设置，反之为添加
-      const type = Object.prototype.hasOwnProperty.call(target, key) ? TriggerType.SET : TriggerType.ADD
+      const type = Array.isArray(target)
+        ? // 代理对象是数组的话，检测索引值是否小于数组长度去判断type
+          Number(key) < target.length
+          ? TriggerType.SET
+          : TriggerType.ADD
+        : // 如果存在该属性，则类型为设置，反之为添加
+          Object.prototype.hasOwnProperty.call(target, key)
+          ? TriggerType.SET
+          : TriggerType.ADD
       const res = Reflect.set(target, key, newValue, receiver)
 
       /**
@@ -149,7 +220,7 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
          */
         // biome-ignore lint/suspicious/noSelfCompare: <NaN>
         if (oldValue !== newValue && (oldValue === oldValue || newValue === newValue)) {
-          trigger(target, key, type)
+          trigger(target, key, type, newValue)
         }
       }
 
@@ -167,7 +238,8 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
      * 拦截 for...in、
      */
     ownKeys(target) {
-      track(target, ITERATE_KEY)
+      // 对于数组来说，影响的属性包括新增元素、修改数组长度，故直接使用length作为key建立响应式连接
+      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
 
       return Reflect.ownKeys(target)
     },
@@ -192,7 +264,13 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
  * @param obj 代理对象
  */
 export const reactive = <T extends object>(obj: T) => {
-  return createReactive<T>(obj)
+  const existProxy = reactiveMap.get(obj)
+  if (existProxy) return existProxy as T
+
+  const proxy = createReactive<T>(obj)
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
 
 /**
@@ -200,7 +278,13 @@ export const reactive = <T extends object>(obj: T) => {
  * @param obj 代理对象
  */
 export const shallowReactive = <T extends object>(obj: T) => {
-  return createReactive<T>(obj, true)
+  const existProxy = reactiveMap.get(obj)
+  if (existProxy) return existProxy as T
+
+  const proxy = createReactive<T>(obj, true)
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
 
 /**
@@ -208,7 +292,13 @@ export const shallowReactive = <T extends object>(obj: T) => {
  * @param obj 代理对象
  */
 export const readonly = <T extends object>(obj: T) => {
-  return createReactive<T>(obj, false, true)
+  const existProxy = reactiveMap.get(obj)
+  if (existProxy) return existProxy as T
+
+  const proxy = createReactive<T>(obj, false, true)
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
 
 /**
@@ -216,5 +306,11 @@ export const readonly = <T extends object>(obj: T) => {
  * @param obj 代理对象
  */
 export const shallowReadonly = <T extends object>(obj: T) => {
-  return createReactive<T>(obj, true, true)
+  const existProxy = reactiveMap.get(obj)
+  if (existProxy) return existProxy as T
+
+  const proxy = createReactive<T>(obj, true, true)
+  reactiveMap.set(obj, proxy)
+
+  return proxy
 }
