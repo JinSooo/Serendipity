@@ -1,4 +1,5 @@
 import { type Effect, activeEffect, bucket } from './effect'
+import { isMap, isSet } from './utils'
 
 export type Key = string | symbol
 
@@ -46,6 +47,36 @@ let shouldTrack = true
     return res
   }
 })
+
+// 重写 Map 和 Set 的方法以触发响应式
+const mutableInstrumentations = {
+  add(key) {
+    const target = this.raw
+    const hasKey = target.has(key)
+    const res = target.add(key)
+
+    // 如果值不存在，才需要触发响应
+    if (!hasKey) {
+      // 指定操作类型为 ADD
+      trigger(target, key, TriggerType.ADD)
+    }
+
+    return res
+  },
+  delete(key) {
+    const target = this.raw
+    const hasKey = target.has(key)
+    const res = target.delete(key)
+
+    // 如果值存在，才需要触发响应
+    if (hasKey) {
+      // 指定操作类型为 ADD
+      trigger(target, key, TriggerType.DEL)
+    }
+
+    return res
+  },
+}
 
 /**
  * 追踪 target 中 key 的变化 effect
@@ -260,6 +291,32 @@ const createReactive = <T extends object>(obj: T, isShallow = false, isReadonly 
 }
 
 /**
+ * 创建 Map 和 Set 响应式对象
+ * @param obj 代理对象
+ * @param isShallow 浅响应
+ * @param isReadonly 只读
+ */
+const createMapOrSetReactive = <T extends object>(obj: T, isShallow = false, isReadonly = false) => {
+  return new Proxy<T>(obj, {
+    get(target, key, receiver) {
+      // 代理对象通过 raw 访问原始对象
+      if (key === 'raw') {
+        return target
+      }
+
+      // 如果读取的是 size，则指定第三个参数为原始对象
+      if (key === 'size') {
+        track(target, ITERATE_KEY)
+        return Reflect.get(target, key, target)
+      }
+
+      // 将方法与原始数据对象 target 绑定
+      return mutableInstrumentations[key]
+    },
+  })
+}
+
+/**
  * 创建响应式对象
  * @param obj 代理对象
  */
@@ -267,7 +324,13 @@ export const reactive = <T extends object>(obj: T) => {
   const existProxy = reactiveMap.get(obj)
   if (existProxy) return existProxy as T
 
-  const proxy = createReactive<T>(obj)
+  let proxy: T
+  if (isSet(obj) || isMap(obj)) {
+    proxy = createMapOrSetReactive(obj)
+  } else {
+    proxy = createReactive(obj)
+  }
+
   reactiveMap.set(obj, proxy)
 
   return proxy
