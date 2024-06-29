@@ -1,28 +1,14 @@
 import { effect } from './effect'
 import { reactive } from './reactive'
+import { proxyRefs, ref, toRef, toRefs } from './ref'
 
-const p = reactive(new Map<string, string>([['a', '1']]))
-
-// effect(() => {
-//   p.forEach((v, k, i) => console.log('v, k', v, k))
-// })
-
-effect(() => {
-  for (const [key, value] of p) {
-    console.log('key, value', key, value)
-  }
-})
+const p = reactive({ ok: true })
+const refP = toRef(p, 'ok')
+const proxyP = proxyRefs({ ...toRefs(p) })
+const normal = ref(1)
 
 effect(() => {
-  for (const value of p.values()) {
-    console.log('value', value)
-  }
+  console.log('p', normal.value)
 })
 
-effect(() => {
-  for (const key of p.keys()) {
-    console.log('key', key)
-  }
-})
-
-p.set('a', '2')
+normal.value = 2
