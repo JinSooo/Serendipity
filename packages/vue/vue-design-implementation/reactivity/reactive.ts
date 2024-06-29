@@ -13,6 +13,7 @@ export enum TriggerType {
 
 // ownKeys 获取一个对象的所有键值，不和任何键绑定，故设置一个唯一标识
 const ITERATE_KEY = Symbol()
+const MAP_ITERATE_KEY = Symbol()
 
 // 存储原始对象到代理对象的映射
 const reactiveMap = new Map()
@@ -48,6 +49,46 @@ let shouldTrack = true
   }
 })
 
+function iterationMethod(type: 'KEY' | 'VALUE' | 'ENTRIES') {
+  return function () {
+    // 确保内部的value也是响应式的
+    const wrap = val => (typeof val === 'object' ? reactive(val) : val)
+    const target = this.raw
+    const itr = type === 'KEY' ? target.keys() : type === 'VALUE' ? target.values() : target[Symbol.iterator]()
+
+    if (type === 'KEY') {
+      track(target, MAP_ITERATE_KEY)
+    } else {
+      track(target, ITERATE_KEY)
+    }
+
+    return {
+      // 迭代器协议：一个对象实现了next方法
+      next() {
+        const { value, done } = itr.next()
+        return {
+          // 对遍历的数据也需要包裹响应式
+          value:
+            type === 'VALUE'
+              ? wrap(value)
+              : type === 'ENTRIES'
+                ? value
+                  ? [wrap(value[0]), wrap(value[1])]
+                  : value
+                : type === 'KEY'
+                  ? wrap(value)
+                  : undefined,
+          done,
+        }
+      },
+      // 可迭代协议：一个对象实现了Symbol.iterator方法
+      [Symbol.iterator]() {
+        return this
+      },
+    }
+  }
+}
+
 // 重写 Map 和 Set 的方法以触发响应式
 const mutableInstrumentations = {
   add(key) {
@@ -76,6 +117,41 @@ const mutableInstrumentations = {
 
     return res
   },
+  set(key, value) {
+    const target = this.raw
+    const hasKey = target.has(key)
+
+    const oldValue = target.get(key)
+    // 获取原始数据，避免数据污染
+    const rawValue = value.raw || value
+    const res = target.set(key, rawValue)
+
+    // 如果值不存在，才需要触发响应
+    if (!hasKey) {
+      // 指定操作类型为 ADD
+      trigger(target, key, TriggerType.ADD)
+      // biome-ignore lint/suspicious/noSelfCompare: <NaN>
+    } else if (oldValue !== value || (oldValue === oldValue && value === value)) {
+      trigger(target, key, TriggerType.SET)
+    }
+
+    return res
+  },
+  forEach(callback, thisArg) {
+    // 确保内部的value也是响应式的
+    const wrap = val => (typeof val === 'object' ? reactive(val) : val)
+    const target = this.raw
+
+    track(target, ITERATE_KEY)
+    target.forEach((v, k) => {
+      // 进行包裹
+      callback.call(thisArg, wrap(v), wrap(k), this)
+    })
+  },
+  keys: iterationMethod('KEY'),
+  values: iterationMethod('VALUE'),
+  entries: iterationMethod('ENTRIES'),
+  [Symbol.iterator]: iterationMethod('ENTRIES'),
 }
 
 /**
@@ -119,8 +195,25 @@ export const trigger = (target: Target, key: Key, type: TriggerType, newVal?: an
   })
 
   // 对于 ITERATE_KEY 来说，仅用在添加属性活删除属性的时候，for...in的输出才会发生改变，才需要重新执行其副作用函数
-  if (type === TriggerType.ADD || type === TriggerType.DEL) {
+  if (
+    type === TriggerType.ADD ||
+    type === TriggerType.DEL ||
+    // 对于Map来说，它不仅需要监听键的变化，也需要监听值的变化
+    (type === TriggerType.SET && isMap(target))
+  ) {
     const iterateEffects = depsMap.get(ITERATE_KEY)
+    // 获取与 ITERATE_KEY 相关的副作用函数
+    iterateEffects?.forEach(effectFn => {
+      // 如果 trigger 触发的 effectFn 与当前正在执行的副作用函数相同，则不触发执行
+      if (effectFn !== activeEffect) {
+        effectsToRun.add(effectFn)
+      }
+    })
+  }
+
+  // 对于map.keys进行特殊处理
+  if ((type === TriggerType.ADD || type === TriggerType.DEL) && isMap(target)) {
+    const iterateEffects = depsMap.get(MAP_ITERATE_KEY)
     // 获取与 ITERATE_KEY 相关的副作用函数
     iterateEffects?.forEach(effectFn => {
       // 如果 trigger 触发的 effectFn 与当前正在执行的副作用函数相同，则不触发执行
