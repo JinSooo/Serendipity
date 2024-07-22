@@ -1,21 +1,43 @@
+import { Link, useLocation, useRoutes } from '@solidjs/router'
 import type { Component } from 'solid-js'
 
-import logo from './logo.svg'
-import styles from './App.module.css'
+import { routes } from './routes'
 
 const App: Component = () => {
+  const location = useLocation()
+  const Route = useRoutes(routes)
+
   return (
-    <div class={styles.App}>
-      <header class={styles.header}>
-        <img src={logo} class={styles.logo} alt='logo' />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a class={styles.link} href='https://github.com/solidjs/solid' target='_blank' rel='noopener noreferrer'>
-          Learn Solid
-        </a>
-      </header>
-    </div>
+    <>
+      <nav class='bg-gray-200 text-gray-900 px-4'>
+        <ul class='flex items-center'>
+          <li class='py-2 px-4'>
+            <Link href='/' class='no-underline hover:underline'>
+              Home
+            </Link>
+          </li>
+          <li class='py-2 px-4'>
+            <Link href='/about' class='no-underline hover:underline'>
+              About
+            </Link>
+          </li>
+          <li class='py-2 px-4'>
+            <Link href='/error' class='no-underline hover:underline'>
+              Error
+            </Link>
+          </li>
+
+          <li class='text-sm flex items-center space-x-1 ml-auto'>
+            <span>URL:</span>
+            <input class='w-75px p-1 bg-white text-sm rounded-lg' type='text' readOnly value={location.pathname} />
+          </li>
+        </ul>
+      </nav>
+
+      <main>
+        <Route />
+      </main>
+    </>
   )
 }
 
