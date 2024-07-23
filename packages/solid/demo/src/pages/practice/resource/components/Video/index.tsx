@@ -25,7 +25,7 @@ export default function Video(props: VideoProps) {
   return (
     <div
       // href={props.video.playUrl}
-      class='relative flex w-80 h-96'
+      class='relative flex w-96 h-64 bg-no-repeat bg-cover'
       style={{ background: `url(${props.video.coverUrl})` }}
       // 委托事件
       onClick={[handleClick, 'delegate']}
@@ -36,7 +36,7 @@ export default function Video(props: VideoProps) {
     >
       <div class='absolute w-full bottom-4 left-4 flex flex-col gap-2'>
         <div class='flex justify-between items-center'>
-          <span>{props.video.title}</span>
+          <span class='truncate'>{props.video.title}</span>
           <Show when={show()}>
             <span class='text-xs'>{durationTooltip()}</span>
           </Show>

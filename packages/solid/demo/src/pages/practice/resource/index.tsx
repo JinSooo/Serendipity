@@ -1,4 +1,4 @@
-import { For, Match, Suspense, Switch, createResource, createSignal } from 'solid-js'
+import { For, Match, Suspense, Switch, createResource, createSignal, startTransition } from 'solid-js'
 
 import PracticeWrapper from '../wrapper'
 import Video from './components/Video'
@@ -20,7 +20,12 @@ export default function Resource() {
           class='border rounded-lg px-2 border-gray-900'
           classList={{ 'cursor-not-allowed': videoListParam().page <= 1 }}
           disabled={videoListParam().page <= 1}
-          onClick={() => setVideoListParam(videoListParam => ({ ...videoListParam, page: videoListParam.page - 1 }))}
+          onClick={() =>
+            // transition 与 Suspense 结合，允许我们在加载数据时显示回退内容
+            startTransition(() =>
+              setVideoListParam(videoListParam => ({ ...videoListParam, page: videoListParam.page - 1 })),
+            )
+          }
         >
           Prev
         </button>
@@ -30,7 +35,7 @@ export default function Resource() {
               <div>Error: {videoList.error()}</div>
             </Match>
             <Match when={videoList()}>
-              <div class='flex flex-col gap-4'>
+              <div class='grid grid-cols-3 gap-4'>
                 <For each={videoList().result.list}>
                   {video => {
                     return <Video video={video} />
@@ -43,7 +48,11 @@ export default function Resource() {
         <button
           type='button'
           class='border rounded-lg px-2 border-gray-900'
-          onClick={() => setVideoListParam(videoListParam => ({ ...videoListParam, page: videoListParam.page + 1 }))}
+          onClick={() =>
+            startTransition(() =>
+              setVideoListParam(videoListParam => ({ ...videoListParam, page: videoListParam.page + 1 })),
+            )
+          }
         >
           Next
         </button>
