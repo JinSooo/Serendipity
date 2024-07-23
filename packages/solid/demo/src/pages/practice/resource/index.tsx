@@ -1,6 +1,7 @@
 import { For, Match, Suspense, Switch, createResource, createSignal } from 'solid-js'
 
 import PracticeWrapper from '../wrapper'
+import Video from './components/Video'
 import { getVideoList } from './index.data'
 
 export default function Resource() {
@@ -21,7 +22,7 @@ export default function Resource() {
         >
           Prev
         </button>
-        <Suspense fallback={<span class='block w-[500px] h-[384px]'>Loading...</span>}>
+        <Suspense fallback={<span>Loading...</span>}>
           <Switch>
             <Match when={videoList.error}>
               <div>Error: {videoList.error()}</div>
@@ -29,14 +30,8 @@ export default function Resource() {
             <Match when={videoList()}>
               <div class='flex flex-col gap-4'>
                 <For each={videoList().result.list}>
-                  {(video, index) => {
-                    return (
-                      <a href={video.coverUrl} class='flex'>
-                        <span class='mr-2'>{(videoListParam().page - 1) * 10 + index() + 1}.</span>
-                        <div>{video.title}</div>
-                        <div>-- {video.userName}</div>
-                      </a>
-                    )
+                  {video => {
+                    return <Video video={video} />
                   }}
                 </For>
               </div>
