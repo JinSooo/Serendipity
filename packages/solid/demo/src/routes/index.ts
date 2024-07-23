@@ -11,11 +11,15 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/practice',
-    // component: lazy(() => import('../pages/practice')),
+    // component: lazy(() => import('../pages/practice/wrapper')),
     children: [
       {
         path: '/',
         component: lazy(() => import('../pages/practice')),
+      },
+      {
+        path: '/state',
+        component: lazy(() => import('../pages/practice/state')),
       },
       {
         path: '/resource',

@@ -1,5 +1,6 @@
 import { For, Match, Suspense, Switch, createResource, createSignal } from 'solid-js'
 
+import PracticeWrapper from '../wrapper'
 import { getVideoList } from './index.data'
 
 export default function Resource() {
@@ -7,19 +8,20 @@ export default function Resource() {
   const [videoList] = createResource(videoListParam, getVideoList)
 
   return (
-    <section class='bg-gray-100 text-gray-700 p-8'>
-      <h1 class='text-2xl font-bold'>Resource</h1>
-      <p class='mt-4 mb-8'>This is the resource page.</p>
+    <PracticeWrapper>
+      <h3 class='text-lg font-bold'>Resource</h3>
 
       <div class='flex gap-10 justify-center'>
         <button
           type='button'
           class='border rounded-lg px-2 border-gray-900'
+          classList={{ 'cursor-not-allowed': videoListParam().page <= 1 }}
+          disabled={videoListParam().page <= 1}
           onClick={() => setVideoListParam(videoListParam => ({ ...videoListParam, page: videoListParam.page - 1 }))}
         >
           Prev
         </button>
-        <Suspense fallback={<span>Loading...</span>}>
+        <Suspense fallback={<span class='block w-[500px] h-[384px]'>Loading...</span>}>
           <Switch>
             <Match when={videoList.error}>
               <div>Error: {videoList.error()}</div>
@@ -30,7 +32,7 @@ export default function Resource() {
                   {(video, index) => {
                     return (
                       <a href={video.coverUrl} class='flex'>
-                        <span class='mr-2'>{videoListParam().page * 10 + index()}.</span>
+                        <span class='mr-2'>{(videoListParam().page - 1) * 10 + index() + 1}.</span>
                         <div>{video.title}</div>
                         <div>-- {video.userName}</div>
                       </a>
@@ -49,6 +51,6 @@ export default function Resource() {
           Next
         </button>
       </div>
-    </section>
+    </PracticeWrapper>
   )
 }
