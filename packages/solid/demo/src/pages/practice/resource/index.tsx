@@ -6,6 +6,7 @@ import { getVideoList } from './index.data'
 
 export default function Resource() {
   const [videoListParam, setVideoListParam] = createSignal({ page: 1, size: 10 })
+  // 异步资源Hook
   const [videoList] = createResource(videoListParam, getVideoList)
 
   return (
@@ -15,6 +16,7 @@ export default function Resource() {
       <div class='flex gap-10 justify-center'>
         <button
           type='button'
+          // 两种class的使用
           class='border rounded-lg px-2 border-gray-900'
           classList={{ 'cursor-not-allowed': videoListParam().page <= 1 }}
           disabled={videoListParam().page <= 1}

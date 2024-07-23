@@ -8,6 +8,7 @@ interface UserInfoProps {
 }
 
 export default function UserInfo(props: UserInfoProps) {
+  // 拆分Signal，避免响应式丢失
   const [local, user] = splitProps(props, ['class'])
 
   return (
