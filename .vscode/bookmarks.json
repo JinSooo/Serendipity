@@ -4,27 +4,27 @@
 			"path": "packages/solid/solid-v1.8.19/packages/solid/src/reactive/signal.ts",
 			"bookmarks": [
 				{
-					"line": 275,
+					"line": 283,
 					"column": 0,
 					"label": "createSignal"
 				},
 				{
-					"line": 1323,
+					"line": 1331,
 					"column": 0,
 					"label": "readSignal"
 				},
 				{
-					"line": 1361,
+					"line": 1367,
 					"column": 0,
 					"label": "writeSignal"
 				},
 				{
-					"line": 1551,
+					"line": 1553,
 					"column": 0,
 					"label": "runUpdates"
 				},
 				{
-					"line": 1569,
+					"line": 1571,
 					"column": 0,
 					"label": "completeUpdates"
 				}
