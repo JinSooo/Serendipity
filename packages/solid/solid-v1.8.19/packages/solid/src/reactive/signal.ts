@@ -77,9 +77,23 @@ export interface SourceMapValue {
 
 export interface SignalState<T> extends SourceMapValue {
   value: T;
+  /**
+   * INFO: signal 收集的 effect
+   */
   observers: Computation<any>[] | null;
+  /**
+   * INFO: 这是对应 observers 中 effect 里 sources 对应的位置
+   * (observers[i] as Signal).sources[observerSlots] -> 本身
+   * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
+   */
   observerSlots: number[] | null;
+  /**
+   * INFO: tValue 是用于 Transition 时，在加载数据时显示回退内容，即旧的 value
+   */
   tValue?: T;
+  /**
+   * INFO: 用于判断是否需要重新渲染，通过 options.equals 去配置
+   */
   comparator?: (prev: T, next: T) => boolean;
 }
 
@@ -93,11 +107,25 @@ export interface Owner {
 }
 
 export interface Computation<Init, Next extends Init = Init> extends Owner {
+  /**
+   * 副作用函数
+   */
   fn: EffectFunction<Init, Next>;
   state: ComputationState;
   tState?: ComputationState;
+  /**
+   * INFO: effect 中依赖收集的 Signal
+   */
   sources: SignalState<Next>[] | null;
+  /**
+   * INFO: 这是对应 sources 中 Signal 里 observers 对应的位置
+   * (sources[i] as Signal).observers[sourceSlots] -> 本身
+   * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
+   */
   sourceSlots: number[] | null;
+  /**
+   * INFO: 用于 createMemo 这种特殊的 effect，存在返回值，只读 Signal
+   */
   value?: Init;
   updatedAt: number | null;
   pure: boolean;
@@ -1265,6 +1293,8 @@ export function enableExternalSource(
 // Internal
 export function readSignal(this: SignalState<any> | Memo<any>) {
   const runningTransition = Transition && Transition.running;
+
+  // INFO: 这里是对 createMemo 的处理，因为 memo 本身也是 effect 的一种衍生，所以需要特殊处理
   if (
     (this as Memo<any>).sources &&
     (runningTransition ? (this as Memo<any>).tState : (this as Memo<any>).state)
