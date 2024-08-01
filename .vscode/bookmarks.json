@@ -3,11 +3,11 @@
 		{
 			"path": "packages/solid/solid-v1.8.19/packages/solid/src/reactive/signal.ts",
 			"bookmarks": [
-				{
-					"line": 251,
-					"column": 20,
-					"label": ""
-				},
+        {
+          "line": 251,
+          "column": 20,
+          "label": ""
+        },
 				{
 					"line": 1302,
 					"column": 16,
@@ -29,22 +29,22 @@
 					"label": ""
 				},
 				{
-					"line": 1514,
+					"line": 1517,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1551,
+					"line": 1554,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1571,
+					"line": 1574,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1622,
+					"line": 1674,
 					"column": 9,
 					"label": ""
 				}

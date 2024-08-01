@@ -114,6 +114,9 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
    * 副作用函数
    */
   fn: EffectFunction<Init, Next>;
+  /**
+   * 标识 effect 当前状态，未设置(0)、STALE(1)、PENDING(2)
+   */
   state: ComputationState;
   tState?: ComputationState;
   /**
@@ -470,6 +473,7 @@ export function createMemo<Next extends Prev, Init, Prev>(
 ): Accessor<Next> {
   options = options ? Object.assign({}, signalOptions, options) : signalOptions;
 
+  // memo 存在 computation(effect) 和 signal
   const c: Partial<Memo<Init, Next>> = createComputation(
     fn,
     value!,
@@ -478,6 +482,7 @@ export function createMemo<Next extends Prev, Init, Prev>(
     "_SOLID_DEV_" ? options : undefined
   ) as Partial<Memo<Init, Next>>;
 
+  // signal 所有的
   c.observers = null;
   c.observerSlots = null;
   c.comparator = options.equals || undefined;
@@ -485,6 +490,7 @@ export function createMemo<Next extends Prev, Init, Prev>(
     c.tState = STALE;
     Updates!.push(c as Memo<Init, Next>);
   } else updateComputation(c as Memo<Init, Next>);
+  // 返回一个只读的 signal
   return readSignal.bind(c as Memo<Init, Next>);
 }
 
@@ -1386,6 +1392,9 @@ export function writeSignal(node: SignalState<any> | Memo<any>, value: any, isCo
   return value;
 }
 
+/**
+ * 更新 effect
+ */
 function updateComputation(node: Computation<any>) {
   if (!node.fn) return;
   cleanNode(node);
@@ -1411,6 +1420,9 @@ function updateComputation(node: Computation<any>) {
   }
 }
 
+/**
+ * 执行 effect
+ */
 function runComputation(node: Computation<any>, value: any, time: number) {
   let nextValue;
   const owner = Owner,
@@ -1495,6 +1507,7 @@ function createComputation<Next, Init = unknown>(
   if ("_SOLID_DEV_" && options && options.name) c.name = options.name;
 
   if (ExternalSourceConfig && c.fn) {
+    // 这一行，真正的把 Signal 给诠释出来了
     const [track, trigger] = createSignal<void>(undefined, { equals: false });
     const ordinary = ExternalSourceConfig.factory(c.fn, trigger);
     onCleanup(() => ordinary.dispose());
@@ -1512,6 +1525,9 @@ function createComputation<Next, Init = unknown>(
   return c;
 }
 
+/**
+ * 向上查找 effect 的所有 owner，并通知它们更新
+ */
 function runTop(node: Computation<any>) {
   const runningTransition = Transition && Transition.running;
   if ((runningTransition ? node.tState : node.state) === 0) return;
@@ -1527,7 +1543,7 @@ function runTop(node: Computation<any>) {
     if (runningTransition && Transition!.disposed.has(node)) return;
     if (runningTransition ? node.tState : node.state) ancestors.push(node);
   }
-  // 更新每一个 effect
+  // 准备更新 node 及其相关的每一个 effect
   for (let i = ancestors.length - 1; i >= 0; i--) {
     node = ancestors[i];
     if (runningTransition) {
@@ -1665,6 +1681,11 @@ function runUserEffects(queue: Computation<any>[]) {
   for (i = 0; i < userLength; i++) runTop(queue[i]);
 }
 
+/**
+ * memo 上游，递归向上查找 递归 memo effect，并通知更新
+ * 用于 memo 的递归查找相关 effect
+ * 查找当前 node(effect) 的所有 signal，如果 signal 是 memo signal，则继续递归查找
+ */
 function lookUpstream(node: Computation<any>, ignore?: Computation<any>) {
   const runningTransition = Transition && Transition.running;
   if (runningTransition) node.tState = 0;
@@ -1681,11 +1702,15 @@ function lookUpstream(node: Computation<any>, ignore?: Computation<any>) {
   }
 }
 
+/**
+ * memo 下游，向下查找 memo 的 observers，并通知更新，同时递归向下查找 memo(observer) 下游
+ */
 function markDownstream(node: Memo<any>) {
   const runningTransition = Transition && Transition.running;
   for (let i = 0; i < node.observers!.length; i += 1) {
     const o = node.observers![i];
     if (runningTransition ? !o.tState : !o.state) {
+      // ? 只有 memo 的 observer 才需要 PENDING，啥意思
       if (runningTransition) o.tState = PENDING;
       else o.state = PENDING;
       if (o.pure) Updates!.push(o);
