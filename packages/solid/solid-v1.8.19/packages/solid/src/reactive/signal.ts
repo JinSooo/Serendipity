@@ -51,6 +51,9 @@ let ExternalSourceConfig: {
   factory: ExternalSourceFactory;
   untrack: <V>(fn: () => V) => V;
 } | null = null;
+/**
+ * Listener 指向当前执行的 effect，用于后续依赖收集 Signal
+ */
 let Listener: Computation<any> | null = null;
 let Updates: Computation<any>[] | null = null;
 let Effects: Computation<any>[] | null = null;
@@ -78,21 +81,21 @@ export interface SourceMapValue {
 export interface SignalState<T> extends SourceMapValue {
   value: T;
   /**
-   * INFO: signal 收集的 effect
+   * signal 收集的 effect
    */
   observers: Computation<any>[] | null;
   /**
-   * INFO: 这是对应 observers 中 effect 里 sources 对应的位置
+   * 这是对应 observers 中 effect 里 sources 对应的位置
    * (observers[i] as Signal).sources[observerSlots] -> 本身
    * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
    */
   observerSlots: number[] | null;
   /**
-   * INFO: tValue 是用于 Transition 时，在加载数据时显示回退内容，即旧的 value
+   * tValue 是用于 Transition 时，在加载数据时显示回退内容，即旧的 value
    */
   tValue?: T;
   /**
-   * INFO: 用于判断是否需要重新渲染，通过 options.equals 去配置
+   * 用于判断是否需要重新渲染，通过 options.equals 去配置
    */
   comparator?: (prev: T, next: T) => boolean;
 }
@@ -114,17 +117,17 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
   state: ComputationState;
   tState?: ComputationState;
   /**
-   * INFO: effect 中依赖收集的 Signal
+   * effect 中依赖收集的 Signal
    */
   sources: SignalState<Next>[] | null;
   /**
-   * INFO: 这是对应 sources 中 Signal 里 observers 对应的位置
+   * 这是对应 sources 中 Signal 里 observers 对应的位置
    * (sources[i] as Signal).observers[sourceSlots] -> 本身
    * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
    */
   sourceSlots: number[] | null;
   /**
-   * INFO: 用于 createMemo 这种特殊的 effect，存在返回值，只读 Signal
+   * 用于 createMemo 这种特殊的 effect，存在返回值，只读 Signal
    */
   value?: Init;
   updatedAt: number | null;
@@ -192,6 +195,7 @@ export function createRoot<T>(fn: RootFunction<T>, detachedOwner?: typeof Owner)
 
   if ("_SOLID_DEV_") DevHooks.afterCreateOwner && DevHooks.afterCreateOwner(root);
 
+  // 设置了最上层的 owner，为根节点
   Owner = root;
   Listener = null;
 
@@ -251,6 +255,10 @@ export function createSignal<T>(
 ): Signal<T | undefined> {
   options = options ? Object.assign({}, signalOptions, options) : signalOptions;
 
+  /**
+   * Signal 对象，包括当前的值、观察者队列、比较器
+   * 从这里也可以看出来，signal 只对 value （最外层的对象）做了处理，所以并不能嵌套响应，类似 Vue 的 ref。
+   */
   const s: SignalState<T | undefined> = {
     value,
     observers: null,
@@ -382,6 +390,7 @@ export function createEffect<Next, Init>(
     s = SuspenseContext && useContext(SuspenseContext);
   if (s) c.suspense = s;
   if (!options || !options.render) c.user = true;
+  // 可以看到 computation 一般指 effect，或者含有 effect 作用的 computation，如 memo 等等
   Effects ? Effects.push(c) : updateComputation(c);
 }
 
@@ -1294,11 +1303,14 @@ export function enableExternalSource(
 export function readSignal(this: SignalState<any> | Memo<any>) {
   const runningTransition = Transition && Transition.running;
 
-  // INFO: 这里是对 createMemo 的处理，因为 memo 本身也是 effect 的一种衍生，所以需要特殊处理
+  /**
+   * 这里是对 createMemo 的处理，因为 memo 本身也是 effect 的一种衍生，所以它也会监听内部的 signal 变化，即 sources
+   */
   if (
     (this as Memo<any>).sources &&
     (runningTransition ? (this as Memo<any>).tState : (this as Memo<any>).state)
   ) {
+    // 这边的 STALE 应该是标识数据更新了，当前 memo 需要重新执行了
     if ((runningTransition ? (this as Memo<any>).tState : (this as Memo<any>).state) === STALE)
       updateComputation(this as Memo<any>);
     else {
@@ -1309,6 +1321,7 @@ export function readSignal(this: SignalState<any> | Memo<any>) {
     }
   }
   if (Listener) {
+    // 这边的逻辑就是 signal 和 effect 的相互收集
     const sSlot = this.observers ? this.observers.length : 0;
     if (!Listener.sources) {
       Listener.sources = [this];
@@ -1340,18 +1353,25 @@ export function writeSignal(node: SignalState<any> | Memo<any>, value: any, isCo
         node.tValue = value;
       }
       if (!TransitionRunning) node.value = value;
-    } else node.value = value;
+    }
+    // 赋值
+    else node.value = value;
+    // 通知观察者更新
     if (node.observers && node.observers.length) {
       runUpdates(() => {
         for (let i = 0; i < node.observers!.length; i += 1) {
           const o = node.observers![i];
           const TransitionRunning = Transition && Transition.running;
           if (TransitionRunning && Transition!.disposed.has(o)) continue;
+          // 根据不同情况，将 effect 加入不同的更新队列中
           if (TransitionRunning ? !o.tState : !o.state) {
+            // TODO: pure、Updates、Effects
             if (o.pure) Updates!.push(o);
             else Effects!.push(o);
+            // memo 比较特殊，因为它是一个 effect 和 signal 的结合体，所以还需要处理它的 observers
             if ((o as Memo<any>).observers) markDownstream(o as Memo<any>);
           }
+          // 这边就可以看到 STALE 是用于标识当前数据已经过期了，需要更新
           if (!TransitionRunning) o.state = STALE;
           else o.tState = STALE;
         }
@@ -1369,6 +1389,7 @@ export function writeSignal(node: SignalState<any> | Memo<any>, value: any, isCo
 function updateComputation(node: Computation<any>) {
   if (!node.fn) return;
   cleanNode(node);
+  // 计数 updateAt
   const time = ExecCount;
   runComputation(
     node,
@@ -1394,6 +1415,7 @@ function runComputation(node: Computation<any>, value: any, time: number) {
   let nextValue;
   const owner = Owner,
     listener = Listener;
+  // 从这里可以看出，Listener 应该指向当前执行的 effect，或者说含有 effect 效果的节点（memo）
   Listener = Owner = node;
   try {
     nextValue = node.fn(value);
@@ -1417,12 +1439,14 @@ function runComputation(node: Computation<any>, value: any, time: number) {
     Owner = owner;
   }
   if (!node.updatedAt || node.updatedAt <= time) {
+    // 对于 memo effect 的特殊处理
     if (node.updatedAt != null && "observers" in node) {
       writeSignal(node as Memo<any>, nextValue, true);
     } else if (Transition && Transition.running && node.pure) {
       Transition.sources.add(node as Memo<any>);
       (node as Memo<any>).tValue = nextValue;
     } else node.value = nextValue;
+    // 更新 updateAt
     node.updatedAt = time;
   }
 }
@@ -1494,6 +1518,7 @@ function runTop(node: Computation<any>) {
   if ((runningTransition ? node.tState : node.state) === PENDING) return lookUpstream(node);
   if (node.suspense && untrack(node.suspense.inFallback!))
     return node!.suspense.effects!.push(node!);
+  // 收集相关联的 effect
   const ancestors = [node];
   while (
     (node = node.owner as Computation<any>) &&
@@ -1502,6 +1527,7 @@ function runTop(node: Computation<any>) {
     if (runningTransition && Transition!.disposed.has(node)) return;
     if (runningTransition ? node.tState : node.state) ancestors.push(node);
   }
+  // 更新每一个 effect
   for (let i = ancestors.length - 1; i >= 0; i--) {
     node = ancestors[i];
     if (runningTransition) {
@@ -1511,6 +1537,7 @@ function runTop(node: Computation<any>) {
         if (Transition!.disposed.has(top)) return;
       }
     }
+    // 标明 signal 已经更新，对应的 effect 需要重新计算
     if ((runningTransition ? node.tState : node.state) === STALE) {
       updateComputation(node);
     } else if ((runningTransition ? node.tState : node.state) === PENDING) {
@@ -1523,6 +1550,7 @@ function runTop(node: Computation<any>) {
 }
 
 function runUpdates<T>(fn: () => T, init: boolean) {
+  // 如果存在 Updates，则继续执行 fn，进行 Updates 累加，即批处理所有 Updates，避免更新多次
   if (Updates) return fn();
   let wait = false;
   if (!init) Updates = [];
@@ -1530,6 +1558,7 @@ function runUpdates<T>(fn: () => T, init: boolean) {
   else Effects = [];
   ExecCount++;
   try {
+    // 执行 fn，通知 observers，更新 Updates、Effects
     const res = fn();
     completeUpdates(wait);
     return res;
@@ -1585,6 +1614,7 @@ function completeUpdates(wait: boolean) {
   }
   const e = Effects!;
   Effects = null;
+  // 更新完成后，更新所有 effect
   if (e!.length) runUpdates(() => runEffects(e), false);
   else if ("_SOLID_DEV_") DevHooks.afterUpdate && DevHooks.afterUpdate();
   if (res) res();
@@ -1665,6 +1695,9 @@ function markDownstream(node: Memo<any>) {
   }
 }
 
+/**
+ * 清空 effect 在 source 中 signal 中的依赖收集
+ */
 function cleanNode(node: Owner) {
   let i;
   if ((node as Computation<any>).sources) {
@@ -1673,11 +1706,15 @@ function cleanNode(node: Owner) {
         index = (node as Computation<any>).sourceSlots!.pop()!,
         obs = source.observers;
       if (obs && obs.length) {
+        // 利用 source.observers 的最后一位去覆盖当前需要清除的 effect
         const n = obs.pop()!,
           s = source.observerSlots!.pop()!;
         if (index < obs.length) {
+          // 更新最后一位 observer 的位置，为需要覆盖的位置
           n.sourceSlots![s] = index;
+          // 更新最后一位 observer 在 source.observers 中的位置
           obs[index] = n;
+          // 更新 source.observerSlots 中最后一位 observer 的位置
           source.observerSlots![index] = s;
         }
       }

@@ -4,29 +4,49 @@
 			"path": "packages/solid/solid-v1.8.19/packages/solid/src/reactive/signal.ts",
 			"bookmarks": [
 				{
-					"line": 283,
-					"column": 0,
-					"label": "createSignal"
+					"line": 251,
+					"column": 20,
+					"label": ""
 				},
 				{
-					"line": 1331,
-					"column": 0,
-					"label": "readSignal"
+					"line": 1302,
+					"column": 16,
+					"label": ""
 				},
 				{
-					"line": 1367,
-					"column": 0,
-					"label": "writeSignal"
+					"line": 1344,
+					"column": 16,
+					"label": ""
 				},
 				{
-					"line": 1553,
-					"column": 0,
-					"label": "runUpdates"
+					"line": 1388,
+					"column": 9,
+					"label": ""
+				},
+				{
+					"line": 1413,
+					"column": 9,
+					"label": ""
+				},
+				{
+					"line": 1514,
+					"column": 9,
+					"label": ""
+				},
+				{
+					"line": 1551,
+					"column": 9,
+					"label": ""
 				},
 				{
 					"line": 1571,
-					"column": 0,
-					"label": "completeUpdates"
+					"column": 9,
+					"label": ""
+				},
+				{
+					"line": 1622,
+					"column": 9,
+					"label": ""
 				}
 			]
 		}
