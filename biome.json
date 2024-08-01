@@ -1,7 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.5.2/schema.json",
   "files": {
-    "ignore": ["dist/*", "node_modules/*", ".vscode/*"]
+    "ignore": ["dist/*", "node_modules/*", ".vscode/*", "solid-v1.8.19/*"]
   },
   "organizeImports": {
     "enabled": true,
