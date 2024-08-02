@@ -211,7 +211,7 @@
   "scripts": {
     "build": "npm-run-all -nl build:*",
     "build:clean": "rimraf dist/ coverage/ store/dist/ web/dist/ h/dist/ h/jsx-runtime/dist html/dist/",
-    "build:js": "rollup -c",
+    "build:js": "rollup -c --sourcemap",
     "types": "npm-run-all -nl types:*",
     "types:clean": "rimraf types/ store/types/ web/types/ h/types/ h/jsx-runtime/types html/types/",
     "types:copy": "ncp ../../node_modules/dom-expressions/src/jsx.d.ts ./src/jsx.d.ts && ncp ../../node_modules/dom-expressions/src/jsx-h.d.ts ./h/jsx-runtime/src/jsx.d.ts",
