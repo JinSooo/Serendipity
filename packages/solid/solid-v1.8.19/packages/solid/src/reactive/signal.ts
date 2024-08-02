@@ -35,7 +35,9 @@ export const $DEVCOMP = Symbol("solid-dev-component");
 const signalOptions = { equals: equalFn };
 let ERROR: symbol | null = null;
 let runEffects = runQueue;
+// 标识当前 computation 值已过期，需要更新
 const STALE = 1;
+// 目前看到是在 memo 在 effect 中使用时，该 effect 会赋予 PENDING
 const PENDING = 2;
 const UNOWNED: Owner = {
   owned: null,
@@ -55,6 +57,11 @@ let ExternalSourceConfig: {
  * Listener 指向当前执行的 effect，用于后续依赖收集 Signal
  */
 let Listener: Computation<any> | null = null;
+/**
+ * 目前看的话，是把 Updates 和 Effects 看作两种优先级的队列，像 Updates，是存放 memo 等内置特殊处理的 pure effect
+ * 而 Effects 是 createEffect 创建的普通 effect
+ * 一次更新过程中，Updates > Effects，即先执行 Updates，再执行 Effects
+ */
 let Updates: Computation<any>[] | null = null;
 let Effects: Computation<any>[] | null = null;
 let ExecCount = 0;
@@ -134,7 +141,15 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
    */
   value?: Init;
   updatedAt: number | null;
+  /**
+   * TODO: pure 暂时的作用看是用作 memo 和 effect 做区分的
+   * 同时它也是区分 Updates 和 Effects 的
+   */
   pure: boolean;
+
+  /**
+   * TODO: 像是区分是否是用户手动定义的，例如 createEffect 时，user 为 true，而 createMemo 时，user 为 false
+   */
   user?: boolean;
   suspense?: SuspenseContextType;
 }
@@ -1326,6 +1341,7 @@ export function readSignal(this: SignalState<any> | Memo<any>) {
       Updates = updates;
     }
   }
+  // 这里的 Listener 就是当前执行的 effect，赋值是在 runComputation 中传递的，用于后续进行依赖收集的
   if (Listener) {
     // 这边的逻辑就是 signal 和 effect 的相互收集
     const sSlot = this.observers ? this.observers.length : 0;
@@ -1370,6 +1386,7 @@ export function writeSignal(node: SignalState<any> | Memo<any>, value: any, isCo
           const TransitionRunning = Transition && Transition.running;
           if (TransitionRunning && Transition!.disposed.has(o)) continue;
           // 根据不同情况，将 effect 加入不同的更新队列中
+          // 如果当前 effect 的状态还未处于更新，只加入更新队列
           if (TransitionRunning ? !o.tState : !o.state) {
             // TODO: pure、Updates、Effects
             if (o.pure) Updates!.push(o);
@@ -1425,6 +1442,12 @@ function updateComputation(node: Computation<any>) {
  */
 function runComputation(node: Computation<any>, value: any, time: number) {
   let nextValue;
+  /**
+   * 这里实际上可以理解为 listener， owner 的两个调用栈（嵌套）
+   * 先保存 prev 的 owner 和 listener，在赋值到当前的 owner 和 listener 进行处理
+   * 并在最后将当前的 owner 和 listener 赋值到 prev 的 owner 和 listener
+   * 如果内部还有嵌套的 runComputation，那么就会递归继续存储 owner 和 listener
+   */
   const owner = Owner,
     listener = Listener;
   // 从这里可以看出，Listener 应该指向当前执行的 effect，或者说含有 effect 效果的节点（memo）
@@ -1447,11 +1470,12 @@ function runComputation(node: Computation<any>, value: any, time: number) {
     node.updatedAt = time + 1;
     return handleError(err);
   } finally {
+    // 恢复为之前的
     Listener = listener;
     Owner = owner;
   }
   if (!node.updatedAt || node.updatedAt <= time) {
-    // 对于 memo effect 的特殊处理
+    // 对于 memo effect 的特殊处理，手动更新 Signal，通知依赖它的 effect
     if (node.updatedAt != null && "observers" in node) {
       writeSignal(node as Memo<any>, nextValue, true);
     } else if (Transition && Transition.running && node.pure) {
@@ -1566,10 +1590,11 @@ function runTop(node: Computation<any>) {
 }
 
 function runUpdates<T>(fn: () => T, init: boolean) {
-  // 如果存在 Updates，则继续执行 fn，进行 Updates 累加，即批处理所有 Updates，避免更新多次
+  // 如果存在 Updates，则继续执行 fn，再次进行 Updates、Effects 的收集，直到所有的 Updates 先被处理完成
   if (Updates) return fn();
   let wait = false;
   if (!init) Updates = [];
+  // 如果存在 Effects，则继续等待，直到所以需要的 effect 都被处理完成
   if (Effects) wait = true;
   else Effects = [];
   ExecCount++;
@@ -1586,6 +1611,7 @@ function runUpdates<T>(fn: () => T, init: boolean) {
 }
 
 function completeUpdates(wait: boolean) {
+  // 优先更新 Updates
   if (Updates) {
     if (Scheduler && Transition && Transition.running) scheduleQueue(Updates);
     else runQueue(Updates);
@@ -1631,11 +1657,15 @@ function completeUpdates(wait: boolean) {
   const e = Effects!;
   Effects = null;
   // 更新完成后，更新所有 effect
+  // false: 能走到这，那么已经不需要 wait 了，该执行并更新了
   if (e!.length) runUpdates(() => runEffects(e), false);
   else if ("_SOLID_DEV_") DevHooks.afterUpdate && DevHooks.afterUpdate();
   if (res) res();
 }
 
+/**
+ * 将需要更新的加入到队列中，等待后续更新
+ */
 function runQueue(queue: Computation<any>[]) {
   for (let i = 0; i < queue.length; i++) runTop(queue[i]);
 }
@@ -1658,9 +1688,13 @@ function scheduleQueue(queue: Computation<any>[]) {
   }
 }
 
+/**
+ * 与 runQueue 相同，但区分 effect 的 user 属性，看样子用户创建的 effect，更新会推迟
+ */
 function runUserEffects(queue: Computation<any>[]) {
   let i,
     userLength = 0;
+  // 区分出用户创建的 effect，还是内部创建的
   for (i = 0; i < queue.length; i++) {
     const e = queue[i];
     if (!e.user) runTop(e);
@@ -1721,7 +1755,7 @@ function markDownstream(node: Memo<any>) {
 }
 
 /**
- * 清空 effect 在 source 中 signal 中的依赖收集
+ * 清空 effect 在 source 中 signal 中的依赖收集，同时重置 state
  */
 function cleanNode(node: Owner) {
   let i;

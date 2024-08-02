@@ -3,48 +3,48 @@
 		{
 			"path": "packages/solid/solid-v1.8.19/packages/solid/src/reactive/signal.ts",
 			"bookmarks": [
-        {
-          "line": 251,
-          "column": 20,
-          "label": ""
-        },
 				{
-					"line": 1302,
+					"line": 266,
+					"column": 20,
+					"label": ""
+				},
+				{
+					"line": 1317,
 					"column": 16,
 					"label": ""
 				},
 				{
-					"line": 1344,
+					"line": 1360,
 					"column": 16,
 					"label": ""
 				},
 				{
-					"line": 1388,
+					"line": 1405,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1413,
+					"line": 1430,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1517,
+					"line": 1541,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1554,
+					"line": 1578,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1574,
+					"line": 1599,
 					"column": 9,
 					"label": ""
 				},
 				{
-					"line": 1674,
+					"line": 1708,
 					"column": 9,
 					"label": ""
 				}
