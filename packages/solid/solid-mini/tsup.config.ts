@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig(options => ({
-  minify: !options.watch,
+  minify: false,
   entry: ['packages/solid/src/reactive/signal.ts'],
   outDir: 'packages/solid/src/reactive/dist',
   splitting: false,
