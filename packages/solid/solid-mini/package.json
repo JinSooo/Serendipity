@@ -1,0 +1,17 @@
+{
+  "name": "solid-mini",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tsup": "^8.2.4"
+  }
+}
