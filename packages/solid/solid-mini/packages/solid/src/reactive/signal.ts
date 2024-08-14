@@ -42,7 +42,7 @@ type Setter<T> = {
 type Signal<T> = [get: Accessor<T>, set: Setter<T>]
 
 /* ---------------------------- Computation Types --------------------------- */
-type EffectFunction = () => void
+type EffectFunction<T> = (v: T) => T
 
 /**
  * Computation 的状态
@@ -63,7 +63,7 @@ interface Computation<T> {
   /**
    * 副作用函数
    */
-  fn: EffectFunction
+  fn: EffectFunction<T>
 
   /**
    * 当前状态
@@ -81,6 +81,19 @@ interface Computation<T> {
    *  - signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
    */
   sourceSlots: number[] | null
+
+  /**
+   * 用于 createMemo 这种特殊的 Computation，存在返回值
+   */
+  value?: T
+}
+
+/* ------------------------------- Memo Types ------------------------------- */
+interface Memo<T> extends SignalState<T>, Computation<T> {
+  /**
+   * 重置 Signal 和 Computation 的 value 值
+   */
+  value: T
 }
 
 /* ----------------------------- Global Variable ---------------------------- */
@@ -134,6 +147,12 @@ export function createSignal<T>(value?: T, options?: SignalOptions<T | undefined
 }
 
 function readSignal(this: SignalState<any>) {
+  // 对 memo 的特殊处理
+  // 如果读取的时候，memo 的状态是 STALE，那么需要先更新其 value，再返回结果
+  if ((this as Memo<any>).sources && (this as Memo<any>).state === ComputationState.STALE) {
+    updateComputation(this as Memo<any>)
+  }
+
   /**
    * 如果是在 Computation 中调用的 Signal 的话，则启用依赖收集
    */
@@ -174,6 +193,7 @@ function writeSignal(node: SignalState<any>, value: any) {
 
           if (observer.state === ComputationState.UNSET) {
             Effects?.push(observer)
+            ;(observer as Memo<any>).observers && markDownstream(observer as Memo<any>)
           }
           observer.state = ComputationState.STALE
         }
@@ -190,8 +210,8 @@ function writeSignal(node: SignalState<any>, value: any) {
  * @desc Solid 对它的解释是: 创建一个在跟踪范围内运行给定函数的 Computation，从而自动跟踪其依赖项，并在依赖项更新时自动重新运行该函数。
  * @param fn 副作用函数
  */
-export function createEffect<Next, Init>(fn: EffectFunction): void {
-  const computation = createComputation(fn, ComputationState.STALE)
+export function createEffect<T>(fn: EffectFunction<T>, value?: T): void {
+  const computation = createComputation(fn, value!, ComputationState.STALE)
   console.log('🚀 ~ computation:', computation)
 
   // 前半段存在的逻辑，一种情况是在更新的过程中，一个 effect 嵌入了另一个 effect
@@ -201,12 +221,14 @@ export function createEffect<Next, Init>(fn: EffectFunction): void {
 /**
  * Computation 工厂函数
  * @param fn 计算函数
+ * @param fn 初始值
  * @param state Computation 状态
  */
-function createComputation<T>(fn: EffectFunction, state: ComputationState): Computation<T> {
+function createComputation<T>(fn: EffectFunction<T>, init: T, state: ComputationState): Computation<T> {
   const computation: Computation<T> = {
     fn,
     state,
+    value: init,
     sources: null,
     sourceSlots: null,
   }
@@ -251,33 +273,84 @@ function updateComputation(node: Computation<any>) {
   if (!node.fn) return
 
   cleanComputation(node)
-  runComputation(node)
+  runComputation(node, node.value)
 }
 
 /**
  * 执行 Computation
  */
-function runComputation(node: Computation<any>) {
+function runComputation(node: Computation<any>, value: any) {
   // 这里的 Listener 是为了在 runComputation 执行完之后能够恢复之前的 Listener
   // 如果 runComputation 存在递归的话，那么 listener 实际上也会形成一个递归栈，来存储每一个 prev Listener
   const listener = Listener
   // 指向当前正在指向的 Computation
   Listener = node
+  let newValue: any
 
   try {
-    node.fn()
+    newValue = node.fn(value)
   } finally {
     // 恢复为之前的
     Listener = listener
   }
+
+  // 对于 memo 的特殊处理
+  // 这里不能单纯通过 node.observers 去判断，需要判断 node.observers 属性是否存在
+  if ('observers' in node) {
+    // 通知 memo signal 的依赖项更新
+    writeSignal(node as Memo<any>, newValue)
+  }
+  node.value = newValue
 }
 
-function runEffects(effects: Computation<any>[]) {
-  for (let i = 0; i < effects.length; i++) {
-    const effect = effects[i]
-    // 标明 signal 已经更新，对应的 effect 需要重新计算
-    if (effect.state === ComputationState.STALE) {
-      updateComputation(effect)
+/**
+ * 创建一个副作用处理函数
+ * @desc Solid 对它的解释是: 创建一个在跟踪范围内运行给定函数的 Computation，从而自动跟踪其依赖项，并在依赖项更新时自动重新运行该函数。
+ * @param fn 副作用函数
+ */
+export function createMemo<T>(fn: EffectFunction<T>, value?: T, options?: SignalOptions<T>): Accessor<T> {
+  options = options ? Object.assign({}, signalOptions, options) : signalOptions
+
+  const memo: Partial<Memo<T>> = createComputation(fn, value!, ComputationState.STALE)
+  console.log('🚀 ~ memo:', memo)
+
+  // 添加 Signal 的属性
+  memo.observers = null
+  memo.observerSlots = null
+  memo.comparator = options.equals || undefined
+
+  updateComputation(memo as Memo<T>)
+
+  return readSignal.bind(memo as Memo<T>)
+}
+
+/**
+ * memo Signal态，递归向上查找 递归 memo effect，并通知更新
+ * 用于 memo 的递归查找相关 effect
+ * 查找当前 node(effect) 的所有 signal，如果 signal 是 memo signal，则继续递归查找
+ */
+function lookUpstream(node: Computation<any>) {
+  node.state = ComputationState.UNSET
+  for (let i = 0; i < node.sources!.length; i += 1) {
+    const source = node.sources![i] as Memo<any>
+    if (source.sources) {
+      if (source.state === ComputationState.STALE) {
+        updateComputation(source)
+      }
+    }
+  }
+}
+
+/**
+ * memo Computation态，向下查找 memo 的 observers，并通知更新，同时递归向下查找 memo(observer) 下游
+ */
+function markDownstream(node: Memo<any>) {
+  for (let i = 0; i < node.observers!.length; i += 1) {
+    const observer = node.observers![i]
+    if (observer.state === ComputationState.UNSET) {
+      observer.state = ComputationState.STALE
+      Effects!.push(observer)
+      ;(observer as Memo<any>).observers && markDownstream(observer as Memo<any>)
     }
   }
 }
@@ -316,4 +389,14 @@ function completeUpdates(wait: boolean) {
   // 暂时简单一点处理，直接执行 runEffects
   // if (e!.length) runUpdates(() => runEffects(e))
   if (e!.length) runEffects(e)
+}
+
+function runEffects(effects: Computation<any>[]) {
+  for (let i = 0; i < effects.length; i++) {
+    const effect = effects[i]
+    // 标明 signal 已经更新，对应的 effect 需要重新计算
+    if (effect.state === ComputationState.STALE) {
+      updateComputation(effect)
+    }
+  }
 }
