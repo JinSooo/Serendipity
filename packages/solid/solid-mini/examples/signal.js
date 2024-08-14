@@ -1,13 +1,19 @@
 import { createSignal, createEffect } from '../packages/solid/src/reactive/dist/signal.js'
 
-const [track, trigger] = createSignal(1)
+const [signal1, trigger1] = createSignal(1)
+const [signal2, trigger2] = createSignal('1')
 
-console.log(track())
-
+// computation1
 createEffect(() => {
-  console.log(track() * 2)
+  console.log('track1', signal1(), 'track2', signal2())
+})
+
+// computation2
+createEffect(() => {
+  console.log('track1', signal1() * 2)
 })
 
 setTimeout(() => {
-  trigger(3)
+  trigger1(10)
+  trigger2('10')
 }, 1000)

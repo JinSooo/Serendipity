@@ -119,6 +119,7 @@ export function createSignal<T>(value?: T, options?: SignalOptions<T | undefined
     observerSlots: null,
     comparator: options.equals || undefined,
   }
+  console.log('🚀 ~ signal:', signal)
 
   const getter: Accessor<T | undefined> = readSignal.bind(signal)
   const setter: Setter<T | undefined> = (value?: unknown) => {
@@ -191,6 +192,7 @@ function writeSignal(node: SignalState<any>, value: any) {
  */
 export function createEffect<Next, Init>(fn: EffectFunction): void {
   const computation = createComputation(fn, ComputationState.STALE)
+  console.log('🚀 ~ computation:', computation)
 
   // 前半段存在的逻辑，一种情况是在更新的过程中，一个 effect 嵌入了另一个 effect
   Effects ? Effects.push(computation) : updateComputation(computation)
@@ -218,11 +220,14 @@ function createComputation<T>(fn: EffectFunction, state: ComputationState): Comp
  */
 function cleanComputation(node: Computation<any>) {
   if (node.sources) {
+    // 找到当前 Computation 的所有依赖，并取消其依赖关系
     while (node.sources!.length) {
       const source = node.sources!.pop()! as SignalState<any>
       const index = node.sourceSlots!.pop()!
       const observers = source.observers
 
+      // 如果 observers 不存在，那么 pop 出来的那一个就是当前 Computation
+      // 反之，用 observers 的最后一位去覆盖当前需要清除的 Computation
       if (observers && observers.length > 0) {
         const observer = observers.pop()!
         const slot = source.observerSlots!.pop()!
@@ -246,7 +251,6 @@ function updateComputation(node: Computation<any>) {
   if (!node.fn) return
 
   cleanComputation(node)
-
   runComputation(node)
 }
 
@@ -304,6 +308,7 @@ function completeUpdates(wait: boolean) {
   // 后续的 runUpdates 只需要将更新内容加入到 Effects，最后由第一次 runUpdates 统一执行 completeUpdates
   if (wait) return
 
+  console.log('update')
   // 执行到这里，标识所有需要更新的 Computation 都已加入到更新队列 Effects
   const e = Effects!
   // 更新完成后，清空更新队列，准备下一次更新
