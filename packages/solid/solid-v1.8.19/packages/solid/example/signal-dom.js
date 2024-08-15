@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo } from '../packages/solid/src/reactive/dist/signal.js'
+import { createSignal, createEffect, createMemo } from "../dist/solid.js";
 
 const signal1Elem = document.getElementById('signal1')
 const signal2Elem = document.getElementById('signal2')
@@ -25,7 +25,7 @@ createEffect(() => {
 
 // computation3
 createEffect(() => {
-  console.log('memo1', memo1())
+  console.log('track2', memo1())
 
   memo1Elem.textContent = memo1()
 })

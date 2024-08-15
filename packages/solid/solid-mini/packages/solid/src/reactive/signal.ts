@@ -193,6 +193,7 @@ function writeSignal(node: SignalState<any>, value: any) {
 
           if (observer.state === ComputationState.UNSET) {
             Effects?.push(observer)
+            // 省略掉 memo 再走一次 runEffects 的逻辑
             ;(observer as Memo<any>).observers && markDownstream(observer as Memo<any>)
           }
           observer.state = ComputationState.STALE
@@ -381,14 +382,16 @@ function completeUpdates(wait: boolean) {
   // 后续的 runUpdates 只需要将更新内容加入到 Effects，最后由第一次 runUpdates 统一执行 completeUpdates
   if (wait) return
 
-  console.log('update')
   // 执行到这里，标识所有需要更新的 Computation 都已加入到更新队列 Effects
   const e = Effects!
   // 更新完成后，清空更新队列，准备下一次更新
   Effects = null
   // 暂时简单一点处理，直接执行 runEffects
   // if (e!.length) runUpdates(() => runEffects(e))
-  if (e!.length) runEffects(e)
+  if (e!.length) {
+    console.log('update')
+    runEffects(e)
+  }
 }
 
 function runEffects(effects: Computation<any>[]) {

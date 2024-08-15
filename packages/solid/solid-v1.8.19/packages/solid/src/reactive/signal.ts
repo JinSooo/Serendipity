@@ -283,6 +283,7 @@ export function createSignal<T>(
     observerSlots: null,
     comparator: options.equals || undefined
   };
+  console.log("🚀 ~ s:", s)
 
   if ("_SOLID_DEV_") {
     if (options.name) s.name = options.name;
@@ -405,7 +406,8 @@ export function createEffect<Next, Init>(
 ): void {
   runEffects = runUserEffects;
   const c = createComputation(fn, value!, false, STALE, "_SOLID_DEV_" ? options : undefined),
-    s = SuspenseContext && useContext(SuspenseContext);
+  s = SuspenseContext && useContext(SuspenseContext);
+  console.log("🚀 ~ c:", c)
   if (s) c.suspense = s;
   if (!options || !options.render) c.user = true;
   // 可以看到 computation 一般指 effect，或者含有 effect 作用的 computation，如 memo 等等
@@ -496,6 +498,7 @@ export function createMemo<Next extends Prev, Init, Prev>(
     0,
     "_SOLID_DEV_" ? options : undefined
   ) as Partial<Memo<Init, Next>>;
+  console.log("🚀 ~ memo:", c)
 
   // signal 所有的
   c.observers = null;
