@@ -194,7 +194,7 @@ function writeSignal(node: SignalState<any>, value: any) {
           if (observer.state === ComputationState.UNSET) {
             Effects?.push(observer)
             // 省略掉 memo 再走一次 runEffects 的逻辑
-            ;(observer as Memo<any>).observers && markDownstream(observer as Memo<any>)
+            // ;(observer as Memo<any>).observers && markDownstream(observer as Memo<any>)
           }
           observer.state = ComputationState.STALE
         }

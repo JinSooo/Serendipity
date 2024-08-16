@@ -32,6 +32,7 @@ export const equalFn = <T>(a: T, b: T) => a === b;
 export const $PROXY = Symbol("solid-proxy");
 export const $TRACK = Symbol("solid-track");
 export const $DEVCOMP = Symbol("solid-dev-component");
+// 默认的 signal options
 const signalOptions = { equals: equalFn };
 let ERROR: symbol | null = null;
 let runEffects = runQueue;
@@ -88,12 +89,12 @@ export interface SourceMapValue {
 export interface SignalState<T> extends SourceMapValue {
   value: T;
   /**
-   * signal 收集的 effect
+   * 观察该 Signal 的 Computation
    */
   observers: Computation<any>[] | null;
   /**
-   * 这是对应 observers 中 effect 里 sources 对应的位置
-   * (observers[i] as Signal).sources[observerSlots] -> 本身
+   * 这是对应 observers 中 effect 里 sources 对应自身的下标位置
+   * (observers[i] as Computation).sources[observerSlots] -> 本身
    * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
    */
   observerSlots: number[] | null;
@@ -131,7 +132,7 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
    */
   sources: SignalState<Next>[] | null;
   /**
-   * 这是对应 sources 中 Signal 里 observers 对应的位置
+   * 这是对应 sources 中 Signal 里 observers 对应自身的下标位置
    * (sources[i] as Signal).observers[sourceSlots] -> 本身
    * signal 和 effect 两者的 observers、sources、observerSlots、sourceSlots 是一一对应的
    */
@@ -292,6 +293,7 @@ export function createSignal<T>(
   }
 
   const setter: Setter<T | undefined> = (value?: unknown) => {
+	  // 如果 setter 的是一个函数，则传入 prev 值，先进行计算，获得最新的 value 值
     if (typeof value === "function") {
       if (Transition && Transition.running && Transition.sources.has(s)) value = value(s.tValue);
       else value = value(s.value);
