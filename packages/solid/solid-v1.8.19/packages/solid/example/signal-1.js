@@ -14,5 +14,5 @@ createEffect(() => {
   console.log('track2', signal2())
 })
 
-// trigger1(Math.random() * 100)
-// trigger2(`${Math.random() * 100}`)
+trigger1(Math.random() * 100)
+trigger2(`${Math.random() * 100}`)

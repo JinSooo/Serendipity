@@ -1721,15 +1721,17 @@ function runUserEffects(queue: Computation<any>[]) {
 }
 
 /**
- * memo 上游，递归向上查找 递归 memo effect，并通知更新
- * 用于 memo 的递归查找相关 effect
- * 查找当前 node(effect) 的所有 signal，如果 signal 是 memo signal，则继续递归查找
+ * 向上查找 memo 所依赖的 sources，如果存在未更新的 memo，则更新
+ * 同时递归向上找到所有依赖的 memo，直至所有依赖更新完成后，当前 memo 可更新成最新值
  */
 function lookUpstream(node: Computation<any>, ignore?: Computation<any>) {
   const runningTransition = Transition && Transition.running;
+  // 注意，重置当前 node 的状态，不然后续当前 node 无法更新
   if (runningTransition) node.tState = 0;
   else node.state = 0;
   for (let i = 0; i < node.sources!.length; i += 1) {
+    // 这里 source 本应该是个 Signal，再通过下面 source.sources 的判断，我们就可以理解了
+    // 就是 Memo 依赖的向上递归更新
     const source = node.sources![i] as Memo<any>;
     if (source.sources) {
       const state = runningTransition ? source.tState : source.state;
@@ -1742,16 +1744,19 @@ function lookUpstream(node: Computation<any>, ignore?: Computation<any>) {
 }
 
 /**
- * memo 下游，向下查找 memo 的 observers，并通知更新，同时递归向下查找 memo(observer) 下游
+ * 向下查找 监听当前 memo 的 observers，通知所有 observer 更新
+ * 同时如果监听的是 memo，也需要向下查找所有依赖的 memo，直至所有 observer 都通知完成
  */
 function markDownstream(node: Memo<any>) {
   const runningTransition = Transition && Transition.running;
   for (let i = 0; i < node.observers!.length; i += 1) {
     const o = node.observers![i];
     if (runningTransition ? !o.tState : !o.state) {
-      // ? 只有 memo 的 observer 才需要 PENDING，啥意思
+      // 这里是使用 PENDING 状态的地方
+      // 原因就是当前 node 还未更新，监听它的 observer 需要暂时等待
       if (runningTransition) o.tState = PENDING;
       else o.state = PENDING;
+      // 这里和之前的判断逻辑类似
       if (o.pure) Updates!.push(o);
       else Effects!.push(o);
       (o as Memo<any>).observers && markDownstream(o as Memo<any>);
@@ -1760,7 +1765,7 @@ function markDownstream(node: Memo<any>) {
 }
 
 /**
- * 清空 effect 在 source 中 signal 中的依赖收集，同时重置 state
+ * 清空 node(Computation) 与 signal 之前存在的依赖关系，同时重置 state
  */
 function cleanNode(node: Owner) {
   let i;
