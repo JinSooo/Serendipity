@@ -35,10 +35,11 @@ export const $DEVCOMP = Symbol("solid-dev-component");
 // 默认的 signal options
 const signalOptions = { equals: equalFn };
 let ERROR: symbol | null = null;
+// 执行 Effects 队列的方法，在使用 createEffect 之后会变为 runUserEffects 方法
 let runEffects = runQueue;
 // 标识当前 computation 值已过期，需要更新
 const STALE = 1;
-// 目前看到是在 memo 在 effect 中使用时，该 effect 会赋予 PENDING
+// 用于依赖 memo 的 effect，需要等待 memo 更新完成后，才能执行 effect
 const PENDING = 2;
 const UNOWNED: Owner = {
   owned: null,
@@ -143,13 +144,13 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
   value?: Init;
   updatedAt: number | null;
   /**
-   * TODO: pure 暂时的作用看是用作 memo 和 effect 做区分的
+   * 区分纯函数（memo）和副作用函数的（effect）
    * 同时它也是区分 Updates 和 Effects 的
    */
   pure: boolean;
 
   /**
-   * TODO: 像是区分是否是用户手动定义的，例如 createEffect 时，user 为 true，而 createMemo 时，user 为 false
+   * 区分是否是用户手动定义的，例如 createEffect 时，user 为 true，而 createMemo 时，user 为 false
    */
   user?: boolean;
   suspense?: SuspenseContextType;
@@ -344,9 +345,14 @@ export function createComputed<Next, Init>(
   value?: Init,
   options?: EffectOptions
 ): void {
+  // Computed 也是加入到 Updates 队列的
+  // pure = true
   const c = createComputation(fn, value!, true, STALE, "_SOLID_DEV_" ? options : undefined);
   if (Scheduler && Transition && Transition.running) Updates!.push(c);
   else updateComputation(c);
+
+  // Computed 和我们之前见过的不一样，它并没有返回一个值
+  // 按官方的逻辑，这个函数一般是给其他响应式函数用的，内部使用，不推荐用户使用
 }
 
 /**
@@ -375,6 +381,8 @@ export function createRenderEffect<Next, Init>(
   value?: Init,
   options?: EffectOptions
 ): void {
+  // 可以看到 pure 也是 false
+  // createRenderEffect 和 createEffect 的区别在于第一次执行的时机，更新的执行是一样的
   const c = createComputation(fn, value!, false, STALE, "_SOLID_DEV_" ? options : undefined);
   if (Scheduler && Transition && Transition.running) Updates!.push(c);
   else updateComputation(c);
@@ -433,6 +441,8 @@ export function createReaction(onInvalidate: () => void, options?: EffectOptions
   let fn: (() => void) | undefined;
   const c = createComputation(
       () => {
+        // 追踪的函数只会执行一次，然后清除掉
+        // 如果需要再次追踪，需要再次调用 tracking
         fn ? fn() : untrack(onInvalidate);
         fn = undefined;
       },
@@ -444,6 +454,8 @@ export function createReaction(onInvalidate: () => void, options?: EffectOptions
     s = SuspenseContext && useContext(SuspenseContext);
   if (s) c.suspense = s;
   c.user = true;
+
+  // 手动返回一个追踪函数，进行依赖追踪
   return (tracking: () => void) => {
     fn = tracking;
     updateComputation(c);
@@ -654,10 +666,12 @@ export function createResource<T, S, R>(
   let fetcher: ResourceFetcher<S, T, R>;
   let options: ResourceOptions<T, S>;
   if ((arguments.length === 2 && typeof pFetcher === "object") || arguments.length === 1) {
+    // 参数为2或者1时，没有 sources 参数，source 为 true
     source = true as ResourceSource<S>;
     fetcher = pSource as ResourceFetcher<S, T, R>;
     options = (pFetcher || {}) as ResourceOptions<T, S>;
   } else {
+    // 三个都有的话，就是 source，fetcher，options
     source = pSource as ResourceSource<S>;
     fetcher = pFetcher as ResourceFetcher<S, T, R>;
     options = pOptions || ({} as ResourceOptions<T, S>);
@@ -669,6 +683,7 @@ export function createResource<T, S, R>(
     loadedUnderTransition: boolean | null = false,
     scheduled = false,
     resolved = "initialValue" in options,
+    // sources 里的 Signal 最终被绑定到了 Memo
     dynamic =
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
