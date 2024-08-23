@@ -11,9 +11,9 @@ const memo1 = createMemo(() => signal1() * 2)
 
 // computation1
 createEffect(() => {
-  console.log('track1', signal1())
+  console.log('track1', signal1() + '_' + signal2())
 
-  signal1Elem.textContent = signal1()
+  signal1Elem.textContent = signal1() + '_' + signal2()
 })
 
 // computation2
