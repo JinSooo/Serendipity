@@ -679,25 +679,29 @@ export function createResource<T, S, R>(
     options = pOptions || ({} as ResourceOptions<T, S>);
   }
 
+  // 请求函数的 Promise
   let pr: Promise<T> | null = null,
+    // Promise 状态
     initP: Promise<T> | T | typeof NO_INIT = NO_INIT,
     id: string | null = null,
     loadedUnderTransition: boolean | null = false,
     scheduled = false,
     resolved = "initialValue" in options,
-    // sources 里的 Signal 最终被绑定到了 Memo
+    // sources 里的 Signal 最终被绑定到了 Memo，如果 source 不存在，则为 true
     dynamic =
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
-  // resource 相关的一些状态、变量
   const contexts = new Set<SuspenseContextType>(),
     // options.storage 可以看出来 storage 定义一个自定义存储方式
     [value, setValue] = (options.storage || createSignal)(options.initialValue) as Signal<
       T | undefined
     >,
     [error, setError] = createSignal<unknown>(undefined),
+    // TODO: 看着像内部使用
     [track, trigger] = createSignal(undefined, { equals: false }),
-    // 将 resource 的5个状态存储在 contexts 中 {@link Resource}
+    /**
+     * 将 resource 的5个状态存储在 contexts 中 {@link Resource}
+     */
     [state, setState] = createSignal<"unresolved" | "pending" | "ready" | "refreshing" | "errored">(
       resolved ? "ready" : "unresolved"
     );
@@ -709,11 +713,13 @@ export function createResource<T, S, R>(
     else if (sharedConfig.load && (v = sharedConfig.load(id))) initP = v;
   }
   function loadEnd(p: Promise<T> | null, v: T | undefined, error?: any, key?: S) {
+    // 这里的判断就是为了防止多次调用 load（因为请求返回时间不一致，可能会导致更新到老的数据）
     if (pr === p) {
       pr = null;
       key !== undefined && (resolved = true);
       if ((p === initP || v === initP) && options.onHydrated)
         queueMicrotask(() => options.onHydrated!(key, { value: v }));
+      // 结束后重置 initP
       initP = NO_INIT;
       if (Transition && p && loadedUnderTransition) {
         Transition.promises.delete(p);
@@ -727,10 +733,15 @@ export function createResource<T, S, R>(
     return v;
   }
   function completeLoad(v: T | undefined, err: any) {
+    // 更新状态、value、error 等等内容
     runUpdates(() => {
+      // 更新 value
       if (err === undefined) setValue(() => v);
+      // 更新状态
       setState(err !== undefined ? "errored" : resolved ? "ready" : "unresolved");
+      // 更新 error
       setError(err);
+      // 注：这里的 value、state、error 都是 Signal，所以会触发通知依赖更新的
       for (const c of contexts.keys()) c.decrement!();
       contexts.clear();
     }, false);
@@ -738,6 +749,8 @@ export function createResource<T, S, R>(
 
   function read() {
     const c = SuspenseContext && useContext(SuspenseContext),
+      // 注意 value() 和 error()，会进行依赖收集的操作
+      // 为后续 value 和 error 变化时触发更新
       v = value(),
       err = error();
     if (err !== undefined && !pr) throw err;
@@ -758,6 +771,7 @@ export function createResource<T, S, R>(
   function load(refetching: R | boolean = true) {
     if (refetching !== false && scheduled) return;
     scheduled = false;
+    // true
     const lookup = dynamic ? dynamic() : (source as S);
     loadedUnderTransition = Transition && Transition.running;
     if (lookup == null || lookup === false) {
@@ -765,20 +779,26 @@ export function createResource<T, S, R>(
       return;
     }
     if (Transition && pr) Transition.promises.delete(pr);
+    // p 表示当前执行的 Promise
     const p =
       initP !== NO_INIT
         ? (initP as T | Promise<T>)
         : untrack(() =>
+          // 调用 fetcher
             fetcher(lookup, {
               value: value(),
               refetching
             })
           );
+    // 不是 Promise 的话，那说明不是异步，直接更新结束即可
     if (!isPromise(p)) {
       loadEnd(pr, p, undefined, lookup);
       return p;
     }
+    // 讲当前执行的 Promise 存储在 pr 中
+    // 这里需要注意一点，如果是多次调用 load，那么 pr 存储的是最后一次的 Promise，并且 loadEnd 中
     pr = p;
+    // 有 value 说明 Promise 加载完成了
     if ("value" in p) {
       if ((p as any).status === "success") loadEnd(pr, p.value as T, undefined, lookup);
       else loadEnd(pr, undefined, castError(p.value), lookup);
@@ -786,15 +806,18 @@ export function createResource<T, S, R>(
     }
     scheduled = true;
     queueMicrotask(() => (scheduled = false));
+    // 到这说明 Promise 在走，但是还是完成，所以更新状态
     runUpdates(() => {
       setState(resolved ? "refreshing" : "pending");
       trigger();
     }, false);
+    // Promise 完成后，进入 loadEnd
     return p.then(
       v => loadEnd(p, v, undefined, lookup),
       e => loadEnd(p, undefined, castError(e), lookup)
     ) as Promise<T>;
   }
+  // 这里的定义，是为了方便使用几个子状态
   Object.defineProperties(read, {
     state: { get: () => state() },
     error: { get: () => error() },
