@@ -662,7 +662,9 @@ export function createResource<T, S, R>(
   pFetcher?: ResourceFetcher<S, T, R> | ResourceOptions<T, S>,
   pOptions?: ResourceOptions<T, S> | undefined
 ): ResourceReturn<T, R> {
+  // 响应式数据 Signal
   let source: ResourceSource<S>;
+  // 请求函数
   let fetcher: ResourceFetcher<S, T, R>;
   let options: ResourceOptions<T, S>;
   if ((arguments.length === 2 && typeof pFetcher === "object") || arguments.length === 1) {
@@ -687,12 +689,15 @@ export function createResource<T, S, R>(
     dynamic =
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
+  // resource 相关的一些状态、变量
   const contexts = new Set<SuspenseContextType>(),
+    // options.storage 可以看出来 storage 定义一个自定义存储方式
     [value, setValue] = (options.storage || createSignal)(options.initialValue) as Signal<
       T | undefined
     >,
     [error, setError] = createSignal<unknown>(undefined),
     [track, trigger] = createSignal(undefined, { equals: false }),
+    // 将 resource 的5个状态存储在 contexts 中 {@link Resource}
     [state, setState] = createSignal<"unresolved" | "pending" | "ready" | "refreshing" | "errored">(
       resolved ? "ready" : "unresolved"
     );
@@ -808,6 +813,7 @@ export function createResource<T, S, R>(
       }
     }
   });
+  // dynamic 的话，就是添加一个监听，当 source 变化的时候重新加载
   if (dynamic) createComputed(() => load(false));
   else load(false);
   return [read as Resource<T>, { refetch: load, mutate: setValue }];
