@@ -10,7 +10,8 @@ const getVideoList = async (param = {page: 0,
 }
 
 debugger
-const [data] = createResource(() => getVideoList());
+const [page, setPage] = createSignal(0);
+const [data, { mutate, refetch }] = createResource(page,(page) => getVideoList({page}));
 
 createEffect(() => {
   debugger
@@ -19,4 +20,11 @@ createEffect(() => {
   console.log('data.error', data.error)
   console.log('data.latest', data.latest)
   console.log('data', data())
+  console.log('-----------------------------------------------')
 })
+
+setTimeout(() => {
+  debugger
+  setPage(1)
+  // mutate(1)
+}, 1000)

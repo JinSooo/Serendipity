@@ -689,6 +689,7 @@ export function createResource<T, S, R>(
     resolved = "initialValue" in options,
     // sources 里的 Signal 最终被绑定到了 Memo，如果 source 不存在，则为 true
     dynamic =
+    // 这里会为 sources 创建一个 Memo 内嵌依赖，去统一管理所有的 sources
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
   const contexts = new Set<SuspenseContextType>(),
@@ -772,6 +773,8 @@ export function createResource<T, S, R>(
     if (refetching !== false && scheduled) return;
     scheduled = false;
     // true
+    // 如果 dynamic 有值的话，那么下面会走 createComputed，这里走 dynamic() 进行依赖收集
+    // 后续更新的时候直接，重走一遍 load 即可
     const lookup = dynamic ? dynamic() : (source as S);
     loadedUnderTransition = Transition && Transition.running;
     if (lookup == null || lookup === false) {
@@ -837,8 +840,10 @@ export function createResource<T, S, R>(
     }
   });
   // dynamic 的话，就是添加一个监听，当 source 变化的时候重新加载
+  // TODO: 看起来像 createComputation 是内部使用的 effect，createEffect 是用户使用的 effect
   if (dynamic) createComputed(() => load(false));
   else load(false);
+  // refetch 和 mutate 很简单，从这里也能看到，只是重新调用了之前的方法
   return [read as Resource<T>, { refetch: load, mutate: setValue }];
 }
 
