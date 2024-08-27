@@ -867,12 +867,16 @@ export interface DeferredOptions<T> {
  * @description https://docs.solidjs.com/reference/secondary-primitives/create-deferred
  */
 export function createDeferred<T>(source: Accessor<T>, options?: DeferredOptions<T>) {
+  // 注意：它返回一个只读的 Signal
+
   let t: Task,
     timeout = options ? options.timeoutMs : undefined;
   const node = createComputation(
     () => {
       if (!t || !t.fn)
+        // 利用 requestCallback 来实现，这个函数会在下一次 idle 的时候执行，这样就能实现在浏览器空闲的时候，更新值
         t = requestCallback(
+          // 实现推迟更新 deferred 值
           () => setDeferred(() => node.value as T),
           timeout !== undefined ? { timeout } : undefined
         );
@@ -923,10 +927,16 @@ export function createSelector<T, U = T>(
   fn: EqualityCheckerFunction<T, U> = equalFn as TODO,
   options?: BaseOptions
 ): (key: U) => boolean {
+  // sub 是一个 key -> Set<Computation<any>> 的 Map，用于存储每一个 key 对应的依赖 Computation
+  // 用于后续实现 O(2) 的更新思路
+  // 只需要更新之前选中的取消和现在未选中的进行选中
+  // 有点像 Vue ref 的对象依赖收集
   const subs = new Map<U, Set<Computation<any>>>();
   const node = createComputation(
     (p: T | undefined) => {
+      // 这边注意 source()，这里是个 Computation，所以 source 和这里的 Computation 建立了依赖关系
       const v = source();
+      // 遍历 subs，进行 equal 判断，找到需要更新的地方（实现O(2)）
       for (const [key, val] of subs.entries())
         if (fn(key, v) !== fn(key, p!)) {
           for (const c of val.values()) {
@@ -944,16 +954,20 @@ export function createSelector<T, U = T>(
   ) as Memo<any>;
   updateComputation(node);
   return (key: U) => {
+    // 拿到当前包裹的 Computation
     const listener = Listener;
     if (listener) {
+      // 根据 key 找到对应的依赖集，添加依赖
       let l: Set<Computation<any>> | undefined;
       if ((l = subs.get(key))) l.add(listener);
       else subs.set(key, (l = new Set([listener])));
       onCleanup(() => {
+        console.log('cleanup')
         l!.delete(listener!);
         !l!.size && subs.delete(key);
       });
     }
+    // 返回一个新旧值的 equal 判断
     return fn(
       key,
       Transition && Transition.running && Transition.sources.has(node) ? node.tValue : node.value!
@@ -969,6 +983,7 @@ export function createSelector<T, U = T>(
  * @description https://docs.solidjs.com/reference/reactive-utilities/batch
  */
 export function batch<T>(fn: Accessor<T>): T {
+  // batch 本质就是 runUpdates，实现同一批次的 统一更新，原理原来这么简单
   return runUpdates(fn, false) as T;
 }
 
@@ -980,6 +995,8 @@ export function batch<T>(fn: Accessor<T>): T {
  * @description https://docs.solidjs.com/reference/reactive-utilities/untrack
  */
 export function untrack<T>(fn: Accessor<T>): T {
+  // untrack 原理只是暂时去除了 Listener，防止依赖收集，太妙了
+
   if (!ExternalSourceConfig && Listener === null) return fn();
 
   const listener = Listener;
