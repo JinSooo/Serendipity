@@ -1074,8 +1074,11 @@ export function on<S, Next extends Prev, Prev = Next>(
   const isArray = Array.isArray(deps);
   let prevInput: S;
   let defer = options && options.defer;
+
+  // 生成一个供 createEffect 使用的 副作用函数
   return prevValue => {
     let input: S;
+    // 对于指定的依赖调用，进行依赖收集
     if (isArray) {
       input = Array(deps.length) as unknown as S;
       for (let i = 0; i < deps.length; i++) (input as unknown as TODO[])[i] = deps[i]();
@@ -1084,6 +1087,7 @@ export function on<S, Next extends Prev, Prev = Next>(
       defer = false;
       return prevValue;
     }
+    // 同时，取消 fn 函数内的依赖收集
     const result = untrack(() => fn(input, prevInput, prevValue));
     prevInput = input;
     return result;
@@ -1097,6 +1101,7 @@ export function on<S, Next extends Prev, Prev = Next>(
  * @description https://docs.solidjs.com/reference/lifecycle/on-mount
  */
 export function onMount(fn: () => void) {
+  // 酷，直接用 createEffect + untrack 实现只执行一次的效果
   createEffect(() => untrack(fn));
 }
 
@@ -1175,6 +1180,7 @@ export function enableScheduling(scheduler = requestCallback) {
  *
  * @description https://docs.solidjs.com/reference/reactive-utilities/start-transition
  */
+// 开启 Transition 状态
 export function startTransition(fn: () => unknown): Promise<void> {
   if (Transition && Transition.running) {
     fn();
@@ -1182,6 +1188,8 @@ export function startTransition(fn: () => unknown): Promise<void> {
   }
   const l = Listener;
   const o = Owner;
+
+  // 利用 Promise.resolve() 实现延迟执行
   return Promise.resolve().then(() => {
     Listener = l;
     Owner = o;
@@ -1200,6 +1208,7 @@ export function startTransition(fn: () => unknown): Promise<void> {
       t.done || (t.done = new Promise(res => (t!.resolve = res)));
       t.running = true;
     }
+    // 这里再执行 fn
     runUpdates(fn, false);
     Listener = Owner = null;
     return t ? t.done : undefined;
@@ -1207,6 +1216,7 @@ export function startTransition(fn: () => unknown): Promise<void> {
 }
 
 // keep immediately evaluated module code, below its dependencies like Listener & createSignal
+// Transition isPending 状态
 const [transPending, setTransPending] = /*@__PURE__*/ createSignal(false);
 
 export type Transition = [Accessor<boolean>, (fn: () => void) => Promise<void>];
@@ -1222,6 +1232,7 @@ export type Transition = [Accessor<boolean>, (fn: () => void) => Promise<void>];
  * @description https://docs.solidjs.com/reference/reactive-utilities/use-transition
  */
 export function useTransition(): Transition {
+  // 这是把两个内部的两个变量给抽离出来了，这样每个 useTransition 拿到的状态都是统一的，不错
   return [transPending, startTransition];
 }
 
@@ -1315,6 +1326,7 @@ export function createContext<T>(
  */
 export function useContext<T>(context: Context<T>): T {
   let value: undefined | T;
+  // 这里就利用 Provider 在 Owner  上添加的 context 去找到对应的键值对，进行操作
   return Owner && Owner.context && (value = Owner.context[context.id]) !== undefined
     ? value
     : context.defaultValue;
@@ -1929,12 +1941,15 @@ function resolveChildren(children: JSX.Element | Accessor<any>): ResolvedChildre
 }
 
 function createProvider(id: symbol, options?: EffectOptions) {
+  // Provider 返回一个函数式组件
   return function provider(props: FlowProps<{ value: unknown }>) {
     let res;
     createRenderEffect(
       () =>
         (res = untrack(() => {
+          // 会在 Owner 的 context 中添加一个专属的 context 内容
           Owner!.context = { ...Owner!.context, [id]: props.value };
+          // 然后再返回子节点的内容
           return children(() => props.children);
         })),
       undefined,
