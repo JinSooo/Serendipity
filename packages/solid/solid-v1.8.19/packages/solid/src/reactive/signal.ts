@@ -157,13 +157,28 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
 }
 
 export interface TransitionState {
+  /**
+   * 暂存的 Signal
+   */
   sources: Set<SignalState<any>>;
+  /**
+   * 暂存的 Computation
+   */
   effects: Computation<any>[];
+  /**
+   * 暂存的 resource 请求
+   */
   promises: Set<Promise<any>>;
   disposed: Set<Computation<any>>;
   queue: Set<Computation<any>>;
   scheduler?: (fn: () => void) => unknown;
+  /**
+   * 是否正在执行
+   */
   running: boolean;
+  /**
+   * 是否结束
+   */
   done?: Promise<void>;
   resolve?: () => void;
 }
@@ -1197,6 +1212,8 @@ export function startTransition(fn: () => unknown): Promise<void> {
     if (Scheduler || SuspenseContext) {
       t =
         Transition ||
+        // Transition 在这边生成
+        // 看得出来，Transition 里面会暂存所有 Signal、Computation 等内容，等待下一次调度执行
         (Transition = {
           sources: new Set(),
           effects: [],
@@ -1415,6 +1432,7 @@ export function readSignal(this: SignalState<any> | Memo<any>) {
     (runningTransition ? (this as Memo<any>).tState : (this as Memo<any>).state)
   ) {
     // 这边的 STALE 应该是标识数据更新了，当前 memo 需要重新执行了
+    // Transition 和 非Transition 做的事情都是一样的，只是存的地方不一样，但是该计算的时候还是会计算，只是暂存的 tValue/tState 上，等过渡完成之后，再进行转移
     if ((runningTransition ? (this as Memo<any>).tState : (this as Memo<any>).state) === STALE)
       updateComputation(this as Memo<any>);
     else {
@@ -1451,6 +1469,7 @@ export function writeSignal(node: SignalState<any> | Memo<any>, value: any, isCo
   let current =
     Transition && Transition.running && Transition.sources.has(node) ? node.tValue : node.value;
   if (!node.comparator || !node.comparator(current, value)) {
+    // 一样的，如果走 Transition，这里的 Signal 以及后续影响的 Computation 都是走 tXxx 进行暂存
     if (Transition) {
       const TransitionRunning = Transition.running;
       if (TransitionRunning || (!isComp && Transition.sources.has(node))) {
@@ -1702,6 +1721,7 @@ function completeUpdates(wait: boolean) {
   }
   if (wait) return;
   let res;
+  // 这里是对 Transition 完成的操作
   if (Transition) {
     if (!Transition.promises.size && !Transition.queue.size) {
       // finish transition
@@ -1709,6 +1729,7 @@ function completeUpdates(wait: boolean) {
       const disposed = Transition.disposed;
       Effects!.push.apply(Effects, Transition!.effects);
       res = Transition.resolve;
+      // Transition 之后，将 tState 的值转回 state 中
       for (const e of Effects!) {
         "tState" in e && (e.state = e.tState!);
         delete e.tState;
@@ -1716,6 +1737,7 @@ function completeUpdates(wait: boolean) {
       Transition = null;
       runUpdates(() => {
         for (const d of disposed) cleanNode(d);
+        // 再对 Signal 的 value 进行转移
         for (const v of sources) {
           v.value = v.tValue;
           if ((v as Memo<any>).owned) {
@@ -1730,6 +1752,7 @@ function completeUpdates(wait: boolean) {
         setTransPending(false);
       }, false);
     } else if (Transition.running) {
+      // 如果走着，那么 Effects 都会暂存到 Transition 中，下面的 runEffects 不会走了
       Transition.running = false;
       Transition.effects.push.apply(Transition.effects, Effects!);
       Effects = null;
