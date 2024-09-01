@@ -44,6 +44,7 @@ export type ObservableObserver<T> =
  * description https://docs.solidjs.com/reference/reactive-utilities/observable
  */
 export function observable<T>(input: Accessor<T>): Observable<T> {
+  // 生成一个发布订阅格式的 observable，供其他库使用 Rxjs
   return {
     subscribe(observer: ObservableObserver<T>) {
       if (!(observer instanceof Object) || observer == null) {

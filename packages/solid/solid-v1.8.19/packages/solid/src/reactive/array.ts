@@ -50,18 +50,26 @@ export function mapArray<T, U>(
   mapFn: (v: T, i: Accessor<number>) => U,
   options: { fallback?: Accessor<any> } = {}
 ): () => U[] {
+  // 这里的都是一些缓存值，利用闭包实现
+  // items 当前缓存的 list 数组备份
   let items: (T | typeof FALLBACK)[] = [],
+    // 对应于 items 利用 mapFn 生成的新数组
     mapped: U[] = [],
+    // mapped 创建的 createRoot 返回的 clean 函数
     disposers: (() => void)[] = [],
+    // 数组长度
     len = 0,
+    // 使用 index 时生成，会产生一个 index Signal 供 mapFn 使用
     indexes: ((v: number) => number)[] | null = mapFn.length > 1 ? [] : null;
 
   onCleanup(() => dispose(disposers));
   return () => {
+    // mapArray 本身没有响应式，但是每次都会去读取 list() 拿取最新值
     let newItems = list() || [],
       newLen = newItems.length,
       i: number,
       j: number;
+    // 这边做依赖收集，监听 list 变化，然后更新
     (newItems as any)[$TRACK]; // top level tracking
     return untrack(() => {
       let newIndices: Map<T | typeof FALLBACK, number>,
@@ -74,6 +82,7 @@ export function mapArray<T, U>(
         newEnd: number,
         item: T | typeof FALLBACK;
 
+      // 传来的时空数组的话，直接情况数据，或者是还在请求显示 fallback
       // fast path for empty arrays
       if (newLen === 0) {
         if (len !== 0) {
@@ -93,19 +102,25 @@ export function mapArray<T, U>(
           len = 1;
         }
       }
+      // len === 0 && newLen > 0 情况，说明是第一次加载，或者请求完成后进入，因为首次的时候 len = 0
       // fast path for new create
       else if (len === 0) {
+        // 这里创建 mapped 数组
         mapped = new Array(newLen);
         for (j = 0; j < newLen; j++) {
           items[j] = newItems[j];
+          // mapper 里会执行 mapFn 方法，而 createRoot 会避免对 mapFn 里的数据产生依赖收集，除非是显示调用，如 list()[i].name()
           mapped[j] = createRoot(mapper);
         }
         len = newLen;
       } else {
+        // 这里就算经典的 Diff 算法了，和 Vue 的类型
         temp = new Array(newLen);
         tempdisposers = new Array(newLen);
         indexes && (tempIndexes = new Array(newLen));
 
+        //  判断两个数组
+        // 先判断 新旧开头
         // skip common prefix
         for (
           start = 0, end = Math.min(len, newLen);
@@ -113,6 +128,7 @@ export function mapArray<T, U>(
           start++
         );
 
+        // 先判断 新旧结尾
         // common suffix
         for (
           end = len - 1, newEnd = newLen - 1;
@@ -124,6 +140,7 @@ export function mapArray<T, U>(
           indexes && (tempIndexes![newEnd] = indexes[end]);
         }
 
+        // 剩下了的为不同的节点
         // 0) prepare a map of all indices in newItems, scanning backwards so we encounter them in natural order
         newIndices = new Map<T, number>();
         newIndicesNext = new Array(newEnd + 1);
@@ -133,6 +150,7 @@ export function mapArray<T, U>(
           newIndicesNext[j] = i === undefined ? -1 : i;
           newIndices.set(item, j);
         }
+        // 遍历 旧数组，看 newIndices 是否也有，有说明就是移动，否则就算删除了
         // 1) step through all old items and see if they can be found in the new set; if so, save them in a temp array and mark them moved; if not, exit them
         for (i = start; i <= end; i++) {
           item = items[i];
@@ -145,6 +163,7 @@ export function mapArray<T, U>(
             newIndices.set(item, j);
           } else disposers[i]();
         }
+        // 遍历 新数组，找到移动节点的新位置，如果没有，说明就算创建了
         // 2) set all the new values, pulling from the temp array if copied, otherwise entering the new value
         for (j = start; j < newLen; j++) {
           if (j in temp) {
@@ -164,12 +183,16 @@ export function mapArray<T, U>(
       return mapped;
     });
     function mapper(disposer: () => void) {
+      // 收集 dispose 方法
       disposers[j] = disposer;
+      // 如果需要 indexes，则会添加一个 index Signal
       if (indexes) {
+        // 这里可以看到，map出来的下标也是响应式的 Signal
         const [s, set] = "_SOLID_DEV_" ? createSignal(j, { name: "index" }) : createSignal(j);
         indexes[j] = set;
         return mapFn(newItems[j], s);
       }
+      // 执行 mapFn
       return (mapFn as any)(newItems[j]);
     }
   };
@@ -187,9 +210,13 @@ export function indexArray<T, U>(
   mapFn: (v: Accessor<T>, i: number) => U,
   options: { fallback?: Accessor<any> } = {}
 ): () => U[] {
+  // 首先，得知道 For 和 Index 两个组件的区别，Index 是用于 list 中每个元素位置基本不会变的情况下，所以，它内部不会去做 Diff 比较，因为已经说明了特殊的使用情况
+  // 另外，Index 中每一个 item 会对应一个 Signal，也是一种优化，处理的时候，只要针对其中一个 Signal 进行更新即可
+
   let items: (T | typeof FALLBACK)[] = [],
     mapped: U[] = [],
     disposers: (() => void)[] = [],
+    // 这里就是记录每一个 item 对应的 Signal
     signals: Setter<T>[] = [],
     len = 0,
     i: number;
@@ -243,6 +270,7 @@ export function indexArray<T, U>(
     });
     function mapper(disposer: () => void) {
       disposers[i] = disposer;
+      // index 会为每一个 item 创建一个 Signal Accessor
       const [s, set] = "_SOLID_DEV_"
         ? createSignal(newItems[i], { name: "value" })
         : createSignal(newItems[i]);

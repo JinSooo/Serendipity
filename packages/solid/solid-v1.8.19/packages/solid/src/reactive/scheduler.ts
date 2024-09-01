@@ -54,6 +54,7 @@ function setupScheduler() {
     (navigator as NavigatorScheduling).scheduling.isInputPending
   ) {
     const scheduling = (navigator as NavigatorScheduling).scheduling;
+    // 判断是否要让出线程给主线程
     shouldYieldToHost = () => {
       const currentTime = performance.now();
       if (currentTime >= deadline) {
@@ -84,6 +85,7 @@ function setupScheduler() {
 }
 
 function enqueue(taskQueue: Task[], task: Task) {
+  // 按过期时间找到插入位置
   function findIndex() {
     let m = 0;
     let n = taskQueue.length - 1;

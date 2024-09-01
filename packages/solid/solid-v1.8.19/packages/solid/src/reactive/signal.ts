@@ -217,6 +217,7 @@ export function createRoot<T>(fn: RootFunction<T>, detachedOwner?: typeof Owner)
           owned: null,
           cleanups: null,
           context: current ? current.context : null,
+          // 这里做了 owner 树
           owner: current
         },
     updateFn = unowned
@@ -226,6 +227,7 @@ export function createRoot<T>(fn: RootFunction<T>, detachedOwner?: typeof Owner)
               throw new Error("Dispose method must be an explicit argument to createRoot function");
             })
         : fn
+        // 返回一个手动 dispose 的函数
       : () => fn(() => untrack(() => cleanNode(root)));
 
   if ("_SOLID_DEV_") DevHooks.afterCreateOwner && DevHooks.afterCreateOwner(root);
