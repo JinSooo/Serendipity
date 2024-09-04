@@ -26,8 +26,12 @@ let taskIdCounter = 1,
 const maxSigned31BitInt = 1073741823;
 /* istanbul ignore next */
 function setupScheduler() {
+  // 利用 MessageChannel 实现宏任务调度
   const channel = new MessageChannel(),
     port = channel.port2;
+    // 在每次调度的最后，执行一次 postMessage
+    // 然后就可以把 onmessage 任务加入到下一次的宏任务队列了
+    // 实现把整个调度任务切分成很多小任务
   scheduleCallback = () => port.postMessage(null);
   channel.port1.onmessage = () => {
     if (scheduledCallback !== null) {

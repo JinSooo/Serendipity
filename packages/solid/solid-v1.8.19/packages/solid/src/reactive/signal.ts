@@ -1717,6 +1717,7 @@ function runUpdates<T>(fn: () => T, init: boolean) {
 function completeUpdates(wait: boolean) {
   // 优先更新 Updates
   if (Updates) {
+    // 存在 Scheduler 的话，那么会将更新加入到队列中，不会立即执行
     if (Scheduler && Transition && Transition.running) scheduleQueue(Updates);
     else runQueue(Updates);
     Updates = null;
@@ -1905,6 +1906,7 @@ function cleanNode(node: Owner) {
     node.owned = null;
   }
 
+  // 清理函数会在每次 cleanNode 之后执行
   if (node.cleanups) {
     for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
     node.cleanups = null;
@@ -1938,6 +1940,7 @@ function runErrors(err: unknown, fns: ((err: any) => void)[], owner: Owner | nul
 }
 
 function handleError(err: unknown, owner = Owner) {
+  // 这里会取出 onError 监听的函数列表
   const fns = ERROR && owner && owner.context && owner.context[ERROR];
   const error = castError(err);
   if (!fns) throw error;
