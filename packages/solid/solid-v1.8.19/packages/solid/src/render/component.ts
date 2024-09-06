@@ -88,6 +88,9 @@ export type ComponentProps<T extends ValidComponent> = T extends Component<infer
  */
 export type Ref<T> = T | ((val: T) => void);
 
+/**
+ * 创建组件，函数式组件最终会被转移成 createComponent 函数
+ */
 export function createComponent<T>(Comp: Component<T>, props: T): JSX.Element {
   if (hydrationEnabled) {
     if (sharedConfig.context) {
