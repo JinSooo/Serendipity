@@ -105,6 +105,7 @@ export function Show<T>(props: {
   children: JSX.Element | ((item: NonNullable<T> | Accessor<NonNullable<T>>) => JSX.Element);
 }): JSX.Element {
   const keyed = props.keyed;
+  // 利用 memo 去监听 when 的状态变化，然后再利用 memo 的返回值，进行条件渲染
   const condition = createMemo<T | undefined | null | boolean>(
     () => props.when,
     undefined,
@@ -115,9 +116,12 @@ export function Show<T>(props: {
         }
       : { equals: (a, b) => (keyed ? a === b : !a === !b) }
   );
+
+  // 此处返回的是一个 JSX.Element
   return createMemo(
     () => {
       const c = condition();
+      // 根据状态进行返回
       if (c) {
         const child = props.children;
         const fn = typeof child === "function" && child.length > 0;
@@ -162,10 +166,12 @@ export function Switch(props: { fallback?: JSX.Element; children: JSX.Element })
   const equals: MemoOptions<EvalConditions>["equals"] = (a, b) =>
     (keyed ? a[1] === b[1] : !a[1] === !b[1]) && a[2] === b[2];
   const conditions = children(() => props.children) as unknown as () => MatchProps<unknown>[],
+    // 相较于 Show，这里变成了一个数组的状态
     evalConditions = createMemo(
       (): EvalConditions => {
         let conds = conditions();
         if (!Array.isArray(conds)) conds = [conds];
+        // 遍历 conds 数组，找到第一个 when 为 true 的 conds[i]
         for (let i = 0; i < conds.length; i++) {
           const c = conds[i].when;
           if (c) {
@@ -180,6 +186,7 @@ export function Switch(props: { fallback?: JSX.Element; children: JSX.Element })
     );
   return createMemo(
     () => {
+      // 这里会取出第一个 when 为 true 的 conds[i]，否则就是 -1
       const [index, when, cond] = evalConditions();
       if (index < 0) return props.fallback;
       const c = cond!.children;
@@ -264,11 +271,13 @@ export function ErrorBoundary(props: {
     "_SOLID_DEV_" ? { name: "errored" } : undefined
   );
   Errors || (Errors = new Set());
+  // 这里会统一进行处理
   Errors.add(setErrored);
   onCleanup(() => Errors.delete(setErrored));
   return createMemo(
     () => {
       let e: any;
+      // 再在这边进行处理，如果有错误，则返回错误信息
       if ((e = errored())) {
         const f = props.fallback;
         if ("_SOLID_DEV_" && (typeof f !== "function" || f.length == 0)) console.error(e);

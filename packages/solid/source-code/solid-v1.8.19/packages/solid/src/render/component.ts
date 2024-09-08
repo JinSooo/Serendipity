@@ -201,6 +201,7 @@ export function mergeProps<T extends unknown[]>(...sources: T): MergeProps<T> {
       typeof s === "function" ? ((proxy = true), createMemo(s as EffectFunction<unknown>)) : s;
   }
   if (proxy) {
+    // 通过 Proxy 坐一层代理，本质上还是访问原本的值
     return new Proxy(
       {
         get(property: string | number | symbol) {
