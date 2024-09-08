@@ -6,6 +6,21 @@ import {
   SVGNamespace,
   DelegatedEvents
 } from "./constants";
+/**
+rxcore 是不是一个库，是一个特殊名词，在 babel 插件中会对其进行转换
+{
+  original: "rxcore",
+  replacement: __dirname + "/core"
+}
+这在 README 中也有说明
+rxcore 主要是用于提供基本的响应式内容，如 reactivity、effect、signal 等
+
+而在 Solid 中使用，会将 rxcore 的路径转为
+{
+  original: "rxcore",
+  replacement: path.join(__dirname, "../../packages/solid/web/src/core")
+}
+ */
 import {
   root,
   effect,
@@ -51,10 +66,12 @@ export function render(code, element, init, options = {}) {
       "The `element` passed to `render(..., element)` doesn't exist. Make sure `element` exists in the document."
     );
   }
+  // disposer 用于接收 root（createRoot）的清理函数
   let disposer;
   root(dispose => {
     disposer = dispose;
     element === document
+      // code 实质就是一个 createComponent 函数，它会经过编译返回一个 JSX.Element
       ? code()
       : insert(element, code(), element.firstChild ? null : undefined, init);
   }, options.owner);
@@ -64,6 +81,7 @@ export function render(code, element, init, options = {}) {
   };
 }
 
+// 根据 html 字符串创建一个模板元素
 export function template(html, isCE, isSVG) {
   let node;
   const create = () => {
@@ -78,17 +96,22 @@ export function template(html, isCE, isSVG) {
   // backwards compatible with older builds
   const fn = isCE
     ? () => untrack(() => document.importNode(node || (node = create()), true))
+    // 返回一个克隆的节点，然后再对其进行操作
     : () => (node || (node = create())).cloneNode(true);
+  // 做缓存处理
   fn.cloneNode = fn;
   return fn;
 }
 
+// 添加事件代理，对指定的事件添加到 document 上进行代理
 export function delegateEvents(eventNames, document = window.document) {
   const e = document[$$EVENTS] || (document[$$EVENTS] = new Set());
   for (let i = 0, l = eventNames.length; i < l; i++) {
     const name = eventNames[i];
     if (!e.has(name)) {
       e.add(name);
+      // 添加对应的事件处理函数
+      // name 和正常事件名称一直，但组件元素的事件名称是 $$xxx 这种形式，可以在 eventHandler 中看到
       document.addEventListener(name, eventHandler);
     }
   }
@@ -203,6 +226,7 @@ export function use(fn, element, arg) {
   return untrack(() => fn(element, arg));
 }
 
+// 插入节点到元素 DOM 中
 export function insert(parent, accessor, marker, initial) {
   if (marker !== undefined && !initial) initial = [];
   if (typeof accessor !== "function") return insertExpression(parent, accessor, initial, marker);
@@ -378,6 +402,7 @@ function eventHandler(e) {
     if (sharedConfig.events.find(([el, ev]) => ev === e)) return;
   }
 
+  // 可以看到，是 $$click 这种形式
   const key = `$$${e.type}`;
   let node = (e.composedPath && e.composedPath()[0]) || e.target;
   // reverse Shadow DOM retargetting
@@ -398,6 +423,7 @@ function eventHandler(e) {
   // cancel hydration
   if (sharedConfig.registry && !sharedConfig.done) sharedConfig.done = _$HY.done = true;
 
+  // 这里进行处理
   while (node) {
     const handler = node[key];
     if (handler && !node.disabled) {

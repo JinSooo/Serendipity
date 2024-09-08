@@ -1267,8 +1267,10 @@ export interface DevComponent<T> extends Memo<unknown> {
 }
 
 // Dev
+/**
+ * devComponent 相比 Comp 对多包裹了一层，应该是做一些开发的记录
+ */
 export function devComponent<P, V>(Comp: (props: P) => V, props: P): V {
-  // devComponent 相比 Comp 对多包裹了一层，应该是做一些开发的记录
   const c = createComputation(
     () =>
       untrack(() => {
