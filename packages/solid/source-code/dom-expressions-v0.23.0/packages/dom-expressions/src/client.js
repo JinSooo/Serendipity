@@ -230,6 +230,11 @@ export function use(fn, element, arg) {
 export function insert(parent, accessor, marker, initial) {
   if (marker !== undefined && !initial) initial = [];
   if (typeof accessor !== "function") return insertExpression(parent, accessor, initial, marker);
+
+  /**
+    这种情况用于，响应式处理的，如 _$insert(_el$, () => props.a);
+    这时候的 props.a 实质上是父组件传递的一个 Signal，所以需要通过 effect 去做监听
+   */
   effect(current => insertExpression(parent, accessor(), current, marker), initial);
 }
 

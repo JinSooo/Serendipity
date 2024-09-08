@@ -197,14 +197,17 @@ export function mergeProps<T extends unknown[]>(...sources: T): MergeProps<T> {
   for (let i = 0; i < sources.length; i++) {
     const s = sources[i];
     proxy = proxy || (!!s && $PROXY in (s as object));
+    // 有函数（即 Signal（编译的时候，传递的 props 会对 Singal 做一层小代理））则做 proxy 代理，进行依赖监听
     sources[i] =
       typeof s === "function" ? ((proxy = true), createMemo(s as EffectFunction<unknown>)) : s;
   }
+  // 有 Signal 的话，则走代理
   if (proxy) {
     // 通过 Proxy 坐一层代理，本质上还是访问原本的值
     return new Proxy(
       {
         get(property: string | number | symbol) {
+        // 看这里的情况，是反过来读的，所以说，mergeProps 的时候，props 要放在最后
           for (let i = sources.length - 1; i >= 0; i--) {
             const v = resolveSource(sources[i])[property];
             if (v !== undefined) return v;
@@ -226,6 +229,8 @@ export function mergeProps<T extends unknown[]>(...sources: T): MergeProps<T> {
       propTraps
     ) as unknown as MergeProps<T>;
   }
+
+  // 如果 Props 没有 Signal 的话，则走正常对象合并即可
   const sourcesMap: Record<string, any[]> = {};
   const defined: Record<string, PropertyDescriptor | undefined> = Object.create(null);
   //let someNonTargetKey = false;
@@ -286,6 +291,7 @@ export function splitProps<
 >(props: T, ...keys: K): SplitProps<T, K> {
   if ($PROXY in props) {
     const blocked = new Set<keyof T>(keys.length > 1 ? keys.flat() : keys[0]);
+    // 利用不同的 keys 进行划分，再通过 Proxy 进行区域划分
     const res = keys.map(k => {
       return new Proxy(
         {
@@ -302,6 +308,7 @@ export function splitProps<
         propTraps
       );
     });
+    // 这里是 othersProps，用于未选择的 keys
     res.push(
       new Proxy(
         {
@@ -320,6 +327,8 @@ export function splitProps<
     );
     return res as SplitProps<T, K>;
   }
+
+  // 同理，这边是不存在 Signal 或者说响应式的情况，直接对 props 或者说 不同对象对拆分处理
   const otherObject: Record<string, any> = {};
   const objects: Record<string, any>[] = keys.map(() => ({}));
 
