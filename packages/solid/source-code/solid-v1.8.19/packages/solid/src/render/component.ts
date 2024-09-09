@@ -376,15 +376,19 @@ export function lazy<T extends Component<any>>(
       });
       comp = s;
     } else if (!comp) {
+      // lazy 会创建一个 createResource，用于资源加载
+      // 这里的 createResource 会和 SuspenseContext 结合，用于资源加载完成前，显示 fallback
       const [s] = createResource<T>(() => (p || (p = fn())).then(mod => mod.default));
       comp = s;
     }
     let Comp: T | undefined;
     return createMemo(
       () =>
+        // 只有等 createResource 资源加载完成后，Comp 才会被赋值，同时 Suspense 会显示 fallback
         (Comp = comp()) &&
         untrack(() => {
           if ("_SOLID_DEV_") Object.assign(Comp!, { [$DEVCOMP]: true });
+          // 这里返回组件
           if (!ctx) return Comp!(props);
           const c = sharedConfig.context;
           setHydrateContext(ctx);
