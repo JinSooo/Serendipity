@@ -13,14 +13,26 @@ type NavigatorScheduling = Navigator & {
 
 let taskIdCounter = 1,
   isCallbackScheduled = false,
+  /**
+    当时是否在执行任务
+   */
   isPerformingWork = false,
   taskQueue: Task[] = [],
   currentTask: Task | null = null,
+  /**
+    利用 navigator.scheduling & deadline & yieldInterval 判断是否需要让出线程给 Host
+   */
   shouldYieldToHost: (() => boolean) | null = null,
   yieldInterval = 5,
   deadline = 0,
   maxYieldInterval = 300,
+  /**
+    用于在下一次浏览器执行时，插入一条宏任务
+   */
   scheduleCallback: (() => void) | null = null,
+  /**
+    用于宏任务中进行调度的回调，与 scheduleCallback 结合，实现分片
+   */
   scheduledCallback: ((hasTimeRemaining: boolean, initialTime: number) => boolean) | null = null;
 
 const maxSigned31BitInt = 1073741823;
@@ -29,11 +41,14 @@ function setupScheduler() {
   // 利用 MessageChannel 实现宏任务调度
   const channel = new MessageChannel(),
     port = channel.port2;
-    // 在每次调度的最后，执行一次 postMessage
-    // 然后就可以把 onmessage 任务加入到下一次的宏任务队列了
-    // 实现把整个调度任务切分成很多小任务
+    /**
+      在每次调度的最后，执行一次 postMessage，然后就可以把 onmessage 任务加入到下一次的宏任务队列了
+      而这个宏任务就会在下一次浏览器渲染完成之后去执行，这样就不会影响浏览器
+      也是通过这种方式实现把整个调度任务切分成很多小任务
+     */
   scheduleCallback = () => port.postMessage(null);
   channel.port1.onmessage = () => {
+    // scheduledCallback -> flushWork
     if (scheduledCallback !== null) {
       const currentTime = performance.now();
       deadline = currentTime + yieldInterval;
@@ -107,6 +122,7 @@ function enqueue(taskQueue: Task[], task: Task) {
 }
 
 export function requestCallback(fn: () => void, options?: { timeout: number }): Task {
+  // 通过初始化 setupScheduler，生成一个 scheduleCallback，用于调度到下一次宏任务作为收尾
   if (!scheduleCallback) setupScheduler();
   let startTime = performance.now(),
     timeout = maxSigned31BitInt;
@@ -124,6 +140,7 @@ export function requestCallback(fn: () => void, options?: { timeout: number }): 
   if (!isCallbackScheduled && !isPerformingWork) {
     isCallbackScheduled = true;
     scheduledCallback = flushWork;
+    // 这里会调度该宏任务
     scheduleCallback!();
   }
 
@@ -150,10 +167,12 @@ function workLoop(hasTimeRemaining: boolean, initialTime: number) {
   let currentTime = initialTime;
   currentTask = taskQueue[0] || null;
   while (currentTask !== null) {
+    // task expired or no time remain
     if (currentTask.expirationTime > currentTime && (!hasTimeRemaining || shouldYieldToHost!())) {
       // This currentTask hasn't expired, and we've reached the deadline.
       break;
     }
+    // execute task
     const callback = currentTask.fn;
     if (callback !== null) {
       currentTask.fn = null;
@@ -164,8 +183,10 @@ function workLoop(hasTimeRemaining: boolean, initialTime: number) {
         taskQueue.shift();
       }
     } else taskQueue.shift();
+    // update new task to be executed
     currentTask = taskQueue[0] || null;
   }
+  // if currentTask is null, it's explained that there is none of tasks
   // Return whether there's additional work
   return currentTask !== null;
 }
