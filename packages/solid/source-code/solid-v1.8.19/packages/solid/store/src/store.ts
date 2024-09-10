@@ -50,9 +50,11 @@ function wrap<T extends StoreNode>(value: T): T {
     Object.defineProperty(value, $PROXY, { value: (p = new Proxy(value, proxyTraps)) });
     if (!Array.isArray(value)) {
       const keys = Object.keys(value),
+        // 获取 value 所有属性的描述符
         desc = Object.getOwnPropertyDescriptors(value);
       for (let i = 0, l = keys.length; i < l; i++) {
         const prop = keys[i];
+        // 如果属性存在 get，则重新指向到 proxy 上
         if (desc[prop].get) {
           Object.defineProperty(value, prop, {
             enumerable: desc[prop].enumerable,
@@ -67,13 +69,21 @@ function wrap<T extends StoreNode>(value: T): T {
 
 export function isWrappable<T>(obj: T | NotWrappable): obj is T;
 export function isWrappable(obj: any) {
+  // 判断对象 obj 是否可包裹
+
   let proto;
+
+  // 如果 obj 不是 null，并且是一个 对象（数组），同时
   return (
     obj != null &&
     typeof obj === "object" &&
+    // 如果存在 $PROXY，则说明已经被包裹过
     (obj[$PROXY] ||
+      // 不存在原型
       !(proto = Object.getPrototypeOf(obj)) ||
+      // 普通对象
       proto === Object.prototype ||
+      // 数组
       Array.isArray(obj))
   );
 }
@@ -91,8 +101,13 @@ export function isWrappable(obj: any) {
  */
 export function unwrap<T>(item: T, set?: Set<unknown>): T;
 export function unwrap<T>(item: any, set = new Set()): T {
+  // 解包一个可能被 Store 包裹过的对象 item
+  // 保留原对象的结构，但返回一个新的、未包装的副本
+
   let result, unwrapped, v, prop;
+  // 如果 item 是 Store 包裹过的，并且包含 $RAW，则返回原始数据
   if ((result = item != null && item[$RAW])) return result;
+  // 如果 item 不是可包裹的，或者已经被包裹过，则直接返回 item，防止循环引用
   if (!isWrappable(item) || set.has(item)) return item;
 
   if (Array.isArray(item)) {
@@ -151,7 +166,9 @@ export function proxyDescriptor(target: StoreNode, property: PropertyKey) {
   return desc;
 }
 
+// 追踪对整个 store 对象本身的访问
 export function trackSelf(target: StoreNode) {
+  // $SELF 作为一个特殊标识，用于追踪对整个 store 对象本身的访问
   getListener() && getNode(getNodes(target, $NODE), $SELF)();
 }
 
@@ -215,6 +232,7 @@ const proxyTraps: ProxyHandler<StoreNode> = {
     return property in target;
   },
 
+  // 这里直接防止直接修改 store
   set() {
     if ("_SOLID_DEV_") console.warn("Cannot mutate a Store directly");
     return true;
@@ -275,16 +293,20 @@ function updateArray(
   current: StoreNode,
   next: Array<any> | Record<string, any> | ((prev: StoreNode) => Array<any> | Record<string, any>)
 ) {
+  // 函数执行，获取最新值
   if (typeof next === "function") next = next(current);
   next = unwrap(next) as Array<any> | Record<string, any>;
+
   if (Array.isArray(next)) {
     if (current === next) return;
     let i = 0,
       len = next.length;
+    // 依次比较，进行更新
     for (; i < len; i++) {
       const value = next[i];
       if (current[i] !== value) setProperty(current, i, value);
     }
+    // 更新 length
     setProperty(current, "length", len);
   } else mergeStoreNode(current, next);
 }
@@ -323,16 +345,24 @@ export function updatePath(current: StoreNode, path: any[], traversed: PropertyK
     prev = current[part];
     traversed = [part].concat(traversed);
   }
+  // setStore({name: 'JinSoo'})
+  // setStore(store => ({name: store.name + 'JinSo'}))
   let value = path[0];
+  // 如果 value 是函数，则执行函数，并返回执行结果
   if (typeof value === "function") {
     value = value(prev, traversed);
     if (value === prev) return;
   }
   if (part === undefined && value == undefined) return;
+  // 解包 value，防止设置的 newValue 是被包裹过的
   value = unwrap(value);
+  // 如果是对象合并（没有指定 part 或两者都是可包装的）
   if (part === undefined || (isWrappable(prev) && isWrappable(value) && !Array.isArray(value))) {
     mergeStoreNode(prev, value);
-  } else setProperty(current, part, value);
+  } else {
+    // 设置单个属性
+    setProperty(current, part, value);
+  }
 }
 
 /** @deprecated */
