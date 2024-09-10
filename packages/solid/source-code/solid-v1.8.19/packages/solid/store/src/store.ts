@@ -46,6 +46,7 @@ export type Store<T> = T;
 function wrap<T extends StoreNode>(value: T): T {
   let p = value[$PROXY];
   if (!p) {
+    // 将 value 包装为 proxy，并存储在 value 的 $PROXY 属性中
     Object.defineProperty(value, $PROXY, { value: (p = new Proxy(value, proxyTraps)) });
     if (!Array.isArray(value)) {
       const keys = Object.keys(value),
@@ -116,6 +117,9 @@ export function unwrap<T>(item: any, set = new Set()): T {
   return item;
 }
 
+/**
+ * 获取对象 DataNode 数据的集合
+ */
 export function getNodes(target: StoreNode, symbol: typeof $NODE | typeof $HAS): DataNodes {
   let nodes = target[symbol];
   if (!nodes)
@@ -123,8 +127,12 @@ export function getNodes(target: StoreNode, symbol: typeof $NODE | typeof $HAS):
   return nodes;
 }
 
+/**
+ * 生成一个 DataNode，也就是一个 Signal，用于后续对象的响应式
+ */
 export function getNode(nodes: DataNodes, property: PropertyKey, value?: any) {
   if (nodes[property]) return nodes[property]!;
+  // 生成一个对应属性的 Signal，用于后续对象的响应式
   const [s, set] = createSignal<any>(value, {
     equals: false,
     internal: true
@@ -154,26 +162,41 @@ export function ownKeys(target: StoreNode) {
 
 const proxyTraps: ProxyHandler<StoreNode> = {
   get(target, property, receiver) {
+    // 利用不同的标签，返回 proxy 或 target
     if (property === $RAW) return target;
     if (property === $PROXY) return receiver;
     if (property === $TRACK) {
       trackSelf(target);
       return receiver;
     }
+    /**
+     * target[$NODE] 存储了所有属性的 DataNode 的集合
+     * 同时，store 对于数据的读取进行了懒处理，当读取某个属性时，
+     * 如果该属性还没有被读取过，则创建一个 DataNode，并存储在 target[$NODE] 中
+     * 当读取该属性时，直接从 target[$NODE] 中读取
+     */
     const nodes = getNodes(target, $NODE);
     const tracked = nodes[property];
+    // 如果已经创建了 DataNode，则直接返回
     let value = tracked ? tracked() : target[property];
     if (property === $NODE || property === $HAS || property === "__proto__") return value;
 
     if (!tracked) {
       const desc = Object.getOwnPropertyDescriptor(target, property);
+      /**
+       * 从这里可以看出来，只要存在 Listener 的情况下，再读取 store 的某个属性时，
+       * 如果该属性还没有被读取过，则创建一个 DataNode，并存储在 target[$NODE] 中
+       * 当读取该属性时，直接从 target[$NODE] 中读取
+       */
       if (
         getListener() &&
         (typeof value !== "function" || target.hasOwnProperty(property)) &&
         !(desc && desc.get)
       )
+      // 创建一个 DateNode，并读取 Signal
         value = getNode(nodes, property, value)();
     }
+    // 这里就是做递归处理，如果 value 是对象，则递归调用 wrap 方法，将 value 包装为 proxy
     return isWrappable(value) ? wrap(value) : value;
   },
 
@@ -187,6 +210,7 @@ const proxyTraps: ProxyHandler<StoreNode> = {
       property === "__proto__"
     )
       return true;
+    // has 会对已经创建过的 DataNode 做响应式处理
     getListener() && getNode(getNodes(target, $HAS), property)();
     return property in target;
   },
@@ -224,6 +248,8 @@ export function setProperty(
     if (state[$HAS] && state[$HAS][property] && prev !== undefined) state[$HAS][property].$();
   } else {
     state[property] = value;
+    // 更新 Signal，通知依赖该 Signal 的组件进行更新
+    // $() -> Signal.setter
     if (state[$HAS] && state[$HAS][property] && prev === undefined) state[$HAS][property].$();
   }
   let nodes = getNodes(state, $NODE),
@@ -500,12 +526,14 @@ export function createStore<T extends object = {}>(
     ? [store?: T | Store<T>, options?: { name?: string }]
     : [store: T | Store<T>, options?: { name?: string }]
 ): [get: Store<T>, set: SetStoreFunction<T>] {
+  // 利用 unwrap，清除 store 的信息，如 proxy 等等，返回真实的原始数据
   const unwrappedStore = unwrap((store || {}) as T);
   const isArray = Array.isArray(unwrappedStore);
   if ("_SOLID_DEV_" && typeof unwrappedStore !== "object" && typeof unwrappedStore !== "function")
     throw new Error(
       `Unexpected type ${typeof unwrappedStore} received when initializing 'createStore'. Expected an object.`
     );
+  // 再将原始数据进行 wrap，生成新的 proxy store
   const wrappedStore = wrap(unwrappedStore);
   if ("_SOLID_DEV_") DEV!.registerGraph({ value: unwrappedStore, name: options && options.name });
   function setStore(...args: any[]): void {

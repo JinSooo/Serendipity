@@ -129,6 +129,18 @@ export function Suspense(props: { fallback?: JSX.Element; children: JSX.Element 
     error: any;
   const [inFallback, setFallback] = createSignal<boolean>(false),
     SuspenseContext = getSuspenseContext(),
+    // 结合 SuspenseContext，所存储的状态信息
+    /**
+      关于 increment 和 decrement 以及 effects 的状态更新，是位于 createResource 中
+      effects 用于组件初始化时，但资源还未加载完成，将 effect 存储到 SuspenseContext 当中
+     */
+      /**
+        可以看看上面的案例，Suspense 内部加载了一个 lazy 组件
+        1. Suspense 创建了一个 SuspenseContext.Provider，并传递了 store 对象
+        2. lazy 组件中会创建一个 createResource，会读取 SuspenseContext 中的状态，并根据资源的状态，执行 increment 和 decrement
+        3.1. 当资源加载完成时，会更新组件，执行组件，会将组件内的 effects 加入到 store.effects 中等待处理
+        3.2. 再执行 decrement，通知 SuspenseContext 状态改变，然后 Suspense 会重新渲染
+       */
     store = {
       increment: () => {
         if (++counter === 1) setFallback(true);
@@ -173,9 +185,11 @@ export function Suspense(props: { fallback?: JSX.Element; children: JSX.Element 
   let dispose: undefined | (() => void);
   onCleanup(() => dispose && dispose());
 
+  // 实质返回的是一个 SuspenseContext.Provider 组件，然后根据状态信息，决定是否渲染 children
   return createComponent(SuspenseContext.Provider, {
     value: store,
     get children() {
+      // 第一次 memo 创建了一个 rendered，什么时候渲染， 交给第二次 memo 决定
       return createMemo(() => {
         if (error) throw error;
         ctx = sharedConfig.context!;
@@ -184,19 +198,25 @@ export function Suspense(props: { fallback?: JSX.Element; children: JSX.Element 
           return (flicker = undefined);
         }
         if (ctx && p === "$$f") setHydrateContext();
+        // 这里创建了一个 memo，用于缓存 props.children，并进行监听
         const rendered = createMemo(() => props.children);
+        // 第二层 memo，根据状态信息，决定是否渲染 children，还是显示 fallback
         return createMemo((prev: JSX.Element) => {
           const inFallback = store.inFallback(),
             { showContent = true, showFallback = true } = show ? show() : {};
+          // 如果内容加载完成，则渲染 children
           if ((!inFallback || (p && p !== "$$f")) && showContent) {
             store.resolved = true;
             dispose && dispose();
             dispose = ctx = p = undefined;
             resumeEffects(store.effects);
+            // 返回 render 结果
             return rendered();
           }
           if (!showFallback) return;
+          // 这里的 dispose 算是判断是否已经渲染过 fallback，如果渲染过，则不重复渲染
           if (dispose) return prev;
+          // 如果内容未加载完成，显示 fallback
           return createRoot(disposer => {
             dispose = disposer;
             if (ctx) {

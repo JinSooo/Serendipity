@@ -153,6 +153,11 @@ export interface Computation<Init, Next extends Init = Init> extends Owner {
    * 区分是否是用户手动定义的，例如 createEffect 时，user 为 true，而 createMemo 时，user 为 false
    */
   user?: boolean;
+
+  /**
+   * 记录当前 Computation 所处的 suspense
+   * 用于资源未加载完成，将 effect 存储到 SuspenseContext 当中
+   */
   suspense?: SuspenseContextType;
 }
 
@@ -435,6 +440,7 @@ export function createEffect<Next, Init>(
   const c = createComputation(fn, value!, false, STALE, "_SOLID_DEV_" ? options : undefined),
   s = SuspenseContext && useContext(SuspenseContext);
   console.log("🚀 ~ c:", c)
+  // 如果存在 Suspense 进行资源加载时，effect 会存储到 SuspenseContext 中，等资源加载完成后再执行
   if (s) c.suspense = s;
   if (!options || !options.render) c.user = true;
   // 可以看到 computation 一般指 effect，或者含有 effect 作用的 computation，如 memo 等等
@@ -709,6 +715,7 @@ export function createResource<T, S, R>(
     // 这里会为 sources 创建一个 Memo 内嵌依赖，去统一管理所有的 sources
       typeof source === "function" && createMemo(source as () => S | false | null | undefined);
 
+  // 注意 contexts 变量，它用于存储 SuspenseContext，当资源加载完成的时候，通知 SuspenseContext 进行状态更新
   const contexts = new Set<SuspenseContextType>(),
     // options.storage 可以看出来 storage 定义一个自定义存储方式
     [value, setValue] = (options.storage || createSignal)(options.initialValue) as Signal<
@@ -760,12 +767,15 @@ export function createResource<T, S, R>(
       // 更新 error
       setError(err);
       // 注：这里的 value、state、error 都是 Signal，所以会触发通知依赖更新的
+
+      // 资源加载完成后，通知 SuspenseContext 进行状态更新，decrement -> 不需要显示 fallback
       for (const c of contexts.keys()) c.decrement!();
       contexts.clear();
     }, false);
   }
 
   function read() {
+    // 这里会读取当前处于的 SuspenseContext，后续做处理
     const c = SuspenseContext && useContext(SuspenseContext),
       // 注意 value() 和 error()，会进行依赖收集的操作
       // 为后续 value 和 error 变化时触发更新
@@ -777,6 +787,7 @@ export function createResource<T, S, R>(
         track();
         if (pr) {
           if (c.resolved && Transition && loadedUnderTransition) Transition.promises.add(pr);
+          // 进行 Suspense 添加，并显示 fallback
           else if (!contexts.has(c)) {
             c.increment!();
             contexts.add(c);
@@ -1665,6 +1676,7 @@ function runTop(node: Computation<any>) {
   const runningTransition = Transition && Transition.running;
   if ((runningTransition ? node.tState : node.state) === 0) return;
   if ((runningTransition ? node.tState : node.state) === PENDING) return lookUpstream(node);
+  // 这里对 Suspense 的 effect 做处理，如果资源还在加载，则先加入到 effects 中，等待后续处理
   if (node.suspense && untrack(node.suspense.inFallback!))
     return node!.suspense.effects!.push(node!);
   // 收集相关联的 effect
