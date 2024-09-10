@@ -15,6 +15,7 @@ export {
   mergeProps
 } from "solid-js";
 
+// 注意这里服务端直接为 true
 export const isServer: boolean = true;
 export const isDev: boolean = false;
 

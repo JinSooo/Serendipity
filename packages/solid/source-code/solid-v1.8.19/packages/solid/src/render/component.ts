@@ -11,6 +11,7 @@ import {
 import { sharedConfig, nextHydrateContext, setHydrateContext } from "./hydration.js";
 import type { JSX } from "../jsx.js";
 
+// 是否启用 ssr
 let hydrationEnabled = false;
 export function enableHydration() {
   hydrationEnabled = true;

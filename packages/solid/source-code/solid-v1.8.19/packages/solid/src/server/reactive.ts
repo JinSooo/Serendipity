@@ -1,3 +1,9 @@
+/**
+在 server 环境中都只是保留一个空函数占位置。
+另外编译结果中有关事件处理的部分也全部被移除了，原因也是一样的，
+服务器上只是组装字符串并不需要响应用户行为，自然没有这些内容，剩下都需要在浏览器中 hydrate 后由浏览器来处理了
+ */
+
 import type { JSX } from "../jsx.js";
 
 export const equalFn = <T>(a: T, b: T) => a === b;
@@ -73,10 +79,15 @@ export function createRoot<T>(fn: (dispose: () => void) => T, detachedOwner?: ty
   return result!;
 }
 
+/**
+ * 服务端的 createSignal
+ */
 export function createSignal<T>(
   value: T,
   options?: { equals?: false | ((prev: T, next: T) => boolean); name?: string }
 ): [get: () => T, set: (v: (T extends Function ? never : T) | ((prev: T) => T)) => T] {
+  // 可以看到，没有做任何响应式处理，甚至可以说就是个空函数
+  // 对于服务端来说，只需要一个初始值即可
   return [
     () => value as T,
     v => {

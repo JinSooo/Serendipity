@@ -258,6 +258,11 @@ export function assign(node, props, isSVG, skipChildren, prevProps = {}, skipRef
 
 // Hydrate
 export function hydrate(code, element, options = {}) {
+  // 浏览器和服务器之间有一些共享的内容，就是利用 sharedConfig 来传递的
+  // 而 sharedConfig 最终会存储在 _$HY 和 [data-hk] 当中
+  // 浏览器渲染时，就会从 _$HY 中获取 sharedConfig 的内容，然后进行渲染
+  // hydrate 最终也是调用 render 方法，只是后续过程中会对 sharedConfig 进行处理
+
   if (globalThis._$HY.done) return render(code, element, [...element.childNodes], options);
   sharedConfig.completed = globalThis._$HY.completed;
   sharedConfig.events = globalThis._$HY.events;
@@ -585,10 +590,13 @@ function cleanChildren(parent, current, marker, replacement) {
 }
 
 function gatherHydratable(element, root) {
+  // 这里用到了 data-hk 数据，来自于 ssrHydrationKey，在 ssr 中会生成该数据
+  // 浏览器 hydrate 的时候，会读取该值
   const templates = element.querySelectorAll(`*[data-hk]`);
   for (let i = 0; i < templates.length; i++) {
     const node = templates[i];
     const key = node.getAttribute("data-hk");
+    // 数据会添加到 sharedConfig.registry 中
     if ((!root || key.startsWith(root)) && !sharedConfig.registry.has(key))
       sharedConfig.registry.set(key, node);
   }

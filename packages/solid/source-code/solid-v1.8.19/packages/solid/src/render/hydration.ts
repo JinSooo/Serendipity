@@ -2,6 +2,10 @@ import { Computation } from "../reactive/signal.js";
 
 export type HydrationContext = { id: string; count: number };
 
+/**
+ * SSR 时，浏览器和服务器之前共享的内容
+ * 换句话说，服务器注入时会带上这些数据传递给浏览器，但是会通过特殊标识（_$HY, [data-hk]）去传递
+ */
 type SharedConfig = {
   context?: HydrationContext;
   resources?: { [key: string]: any };

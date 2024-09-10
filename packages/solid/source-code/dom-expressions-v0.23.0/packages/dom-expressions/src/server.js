@@ -294,13 +294,27 @@ export function HydrationScript(props) {
 }
 
 // rendering
+/**
+ * ssr 最终做的就是将 t 和 nodes 进行字符串拼接
+ */
 export function ssr(t, ...nodes) {
+  /**
+    var _tmpl$ = ["<div", "><!--$-->", "<!--/--><div>+</div><div>reset</div><div>-</div></div>"];
+    function Count() {
+      const [num, setNum] = createSignal(0);
+      // 注意，这里会利用 ssrHydrationKey 生成 data-hk 将数据通过该属性传递给浏览器
+      return _$ssr(_tmpl$, _$ssrHydrationKey(), _$escape(num()));
+    }
+    render(() => _$createComponent(Count, {}), document.getElementById("app"));
+  */
+
   if (nodes.length) {
     let result = "";
 
     for (let i = 0; i < nodes.length; i++) {
       result += t[i];
       const node = nodes[i];
+      // resolveSSRNode 将 node 数据转为字符串
       if (node !== undefined) result += resolveSSRNode(node);
     }
 
@@ -385,11 +399,17 @@ export function ssrAttribute(key, value, isBoolean) {
   return isBoolean ? (value ? " " + key : "") : value != null ? ` ${key}="${value}"` : "";
 }
 
+/**
+ * 生成一个data-hk 传递给浏览器，浏览器能获取到 data-* 的数据值
+ */
 export function ssrHydrationKey() {
   const hk = getHydrationKey();
   return hk ? ` data-hk=${hk}` : "";
 }
 
+/**
+ * 对字符串进行转义，防止 XSS 攻击
+ */
 export function escape(s, attr) {
   const t = typeof s;
   if (t !== "string") {

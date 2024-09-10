@@ -33,6 +33,7 @@ export {
 
 export * from "./server-mock.js";
 
+// 浏览器端为 false
 export const isServer: boolean = false;
 export const isDev: boolean = "_SOLID_DEV_" as unknown as boolean;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -41,8 +42,10 @@ function createElement(tagName: string, isSVG = false): HTMLElement | SVGElement
   return isSVG ? document.createElementNS(SVG_NAMESPACE, tagName) : document.createElement(tagName);
 }
 
+// ssr 入口
 export const hydrate: typeof hydrateCore = (...args) => {
-  enableHydration();
+  // 启用 ssr 模式
+  enableHydration(); // -> solid/src/render/component.ts
   return hydrateCore(...args);
 };
 
