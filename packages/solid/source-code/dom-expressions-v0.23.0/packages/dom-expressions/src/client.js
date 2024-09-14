@@ -266,15 +266,18 @@ export function hydrate(code, element, options = {}) {
   if (globalThis._$HY.done) return render(code, element, [...element.childNodes], options);
   sharedConfig.completed = globalThis._$HY.completed;
   sharedConfig.events = globalThis._$HY.events;
+  // 在服务器端渲染时，会将一些数据序列化并通过 _$HY.r 传递给客户端
   sharedConfig.load = id => globalThis._$HY.r[id];
   sharedConfig.has = id => id in globalThis._$HY.r;
   sharedConfig.gather = root => gatherHydratable(element, root);
+  // 存储所有需要 hydrate 的节点
   sharedConfig.registry = new Map();
   sharedConfig.context = {
     id: options.renderId || "",
     count: 0
   };
   try {
+    // 会找到所有 [data-hk] 节点，存储到 sharedConfig.registry，会在 getNextElement shi复用
     gatherHydratable(element, options.renderId);
     return render(code, element, [...element.childNodes], options);
   } finally {
@@ -285,14 +288,20 @@ export function hydrate(code, element, options = {}) {
 export function getNextElement(template) {
   let node,
     key,
+    // 是否处于 hydrating 状态
     hydrating = isHydrating();
+    // 在 gatherHydratable 会找到所有 [data-hk] 节点，存储到 sharedConfig.registry
+    // 通过 getHydrationKey 从 sharedConfig.registry 中获取对应的节点
+    // 省去创建节点的步骤，直接复用
   if (!hydrating || !(node = sharedConfig.registry.get((key = getHydrationKey())))) {
     if ("_DX_DEV_" && hydrating)
       throw new Error(`Hydration Mismatch. Unable to find DOM nodes for hydration key: ${key}`);
+    // 如果不处于 hydrating 状态 或者没找到该 node，则正常创建节点
     return template();
   }
   if (sharedConfig.completed) sharedConfig.completed.add(node);
   sharedConfig.registry.delete(key);
+  // 返回找到的复用节点
   return node;
 }
 
@@ -301,16 +310,25 @@ export function getNextMatch(el, nodeName) {
   return el;
 }
 
+/**
+ * 找到一个 hydration 边界，从 start - end 之间，找到一个注释节点，用于后续插入 Signal
+ * 注释节点：<!$><!/>（nodeType = 8）
+ */
 export function getNextMarker(start) {
   let end = start,
     count = 0,
     current = [];
+  // 
   if (isHydrating(start)) {
     while (end) {
       if (end.nodeType === 8) {
         const v = end.nodeValue;
+        // 找到 <!$> 节点，count++
         if (v === "$") count++;
+        // 找到 <!/> 节点，count--
         else if (v === "/") {
+          // 如果 count === 0，则表示已经找到一个完整的 hydration 边界
+          // 可以做后续的 Signal 插入，insertExpression 中会用到
           if (count === 0) return [end, current];
           count--;
         }
@@ -322,8 +340,12 @@ export function getNextMarker(start) {
   return [end, current];
 }
 
+/**
+ * 执行 hydrate 过程中元素产生的事件
+ */
 export function runHydrationEvents() {
   if (sharedConfig.events && !sharedConfig.events.queued) {
+    // 确保事件处理在当前执行栈清空后进行，避免阻塞主线程
     queueMicrotask(() => {
       const { completed, events } = sharedConfig;
       events.queued = false;
@@ -445,6 +467,14 @@ function eventHandler(e) {
   }
 }
 
+/**
+ * 插入节点
+ * @param {*} parent 插入或更新内容的父节点
+ * @param {*} value 插入或更新的新值。它可以是简单的文本、数字，也可以是复杂的函数或数组
+ * @param {*} current 当前已存在的内容。用于比较和决定如何更新 DOM
+ * @param {*} marker 一个标记节点，用于指示在哪里插入新内容。主要用于列表渲染等场景，确保正确的插入位置
+ * @param {*} unwrapArray 是否解包数组
+ */
 function insertExpression(parent, value, current, marker, unwrapArray) {
   const hydrating = isHydrating(parent);
   if (hydrating) {
@@ -598,6 +628,7 @@ function gatherHydratable(element, root) {
     const key = node.getAttribute("data-hk");
     // 数据会添加到 sharedConfig.registry 中
     if ((!root || key.startsWith(root)) && !sharedConfig.registry.has(key))
+      // 将所有需要 hydrate 的节点存储在 sharedConfig.registry 中，供后续节点复用（无需创建）
       sharedConfig.registry.set(key, node);
   }
 }

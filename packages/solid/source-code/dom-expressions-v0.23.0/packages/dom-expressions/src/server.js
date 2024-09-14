@@ -21,6 +21,7 @@ export function renderToString(code, options = {}) {
     },
     onError: options.onError
   });
+  // 初始化 sharedConfig.context
   sharedConfig.context = {
     id: renderId || "",
     count: 0,
@@ -38,6 +39,7 @@ export function renderToString(code, options = {}) {
   };
   let html = root(d => {
     setTimeout(d);
+    // resolveSSRNode 将 code 转为 html 字符串
     return resolveSSRNode(escape(code()));
   });
   sharedConfig.context.noHydrate = true;

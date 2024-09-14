@@ -96,6 +96,7 @@ export function createComponent<T>(Comp: Component<T>, props: T): JSX.Element {
   if (hydrationEnabled) {
     if (sharedConfig.context) {
       const c = sharedConfig.context;
+      // 创建一个新的 HydrationContext，用于当前的 hydration 处理
       setHydrateContext(nextHydrateContext());
       const r = "_SOLID_DEV_"
         ? devComponent(Comp, props || ({} as T))

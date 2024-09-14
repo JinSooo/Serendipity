@@ -731,6 +731,10 @@ export function createResource<T, S, R>(
       resolved ? "ready" : "unresolved"
     );
 
+  /**
+   * 如果是 hydration 的话，那么直接去那服务器共享的 SharedConfig 中的数据
+   * 服务器已经序列化好数据，所以这里直接取值即可
+   */
   if (sharedConfig.context) {
     id = sharedConfig.getNextContextId();
     let v;
@@ -1826,16 +1830,24 @@ function runUserEffects(queue: Computation<any>[]) {
     if (!e.user) runTop(e);
     else queue[userLength++] = e;
   }
+
+  // 如果存在 sharedConfig.context，那么说明是 hydration 阶段
   if (sharedConfig.context) {
+    // 如果 count 不为 0，那么说明还有未完成的 hydration 任务
     if (sharedConfig.count) {
       sharedConfig.effects || (sharedConfig.effects = []);
+      // 将当前 queue 中未完成的 effect 加入到 sharedConfig.effects 中，最后进行统一的 hydration 处理
       sharedConfig.effects.push(...queue.slice(0, userLength));
       return;
+    // 这里说明 count = 0，那么说明当前 batch 中的所有 effect 都完成了 hydration
     } else if (sharedConfig.effects) {
+      // 将 sharedConfig.effects 中的 effect 加入到 queue 中，进行统一的 hydration 处理
       queue = [...sharedConfig.effects, ...queue];
       userLength += sharedConfig.effects.length;
+      // 清空 sharedConfig.effects，等待下一次的 hydration 处理
       delete sharedConfig.effects;
     }
+    // 清空 sharedConfig.context，等待下一次的 hydration 处理
     setHydrateContext();
   }
   for (i = 0; i < userLength; i++) runTop(queue[i]);
