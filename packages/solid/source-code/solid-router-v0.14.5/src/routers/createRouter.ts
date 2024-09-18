@@ -25,6 +25,10 @@ function querySelector<T extends Element>(selector: string) {
   }
 }
 
+/**
+ * 创建一个 router，提供一个 config 函数，暴露可配置的 get、set 等方法供外层使用
+ * 说的就是 Router、HashRouter
+ */
 export function createRouter(config: {
   get: () => string | LocationChange
   set: (next: LocationChange) => void
@@ -35,6 +39,7 @@ export function createRouter(config: {
   let ignore = false
   const wrap = (value: string | LocationChange) => (typeof value === 'string' ? { value } : value)
   // 利用 Signal 去监听 config.get() location 的变化
+  // 这里的 Signal 主要是去代理 get、set 两个函数，再在 createRouterContext 里面做处理
   const signal = intercept<LocationChange>(
     createSignal(wrap(config.get()), {
       equals: (a, b) => a.value === b.value && a.state === b.state,

@@ -4,6 +4,9 @@ import type { RouterContext } from '../types.js'
 import { actions } from './action.js'
 import { mockBase } from '../utils.js'
 
+/**
+ * 拦截并处理默认的路由事件，如 click、link
+ */
 export function setupNativeEvents(
   preload = true,
   explicitLinks = false,

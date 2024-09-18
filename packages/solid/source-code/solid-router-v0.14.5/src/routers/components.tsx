@@ -69,6 +69,9 @@ export const createRouterComponent = (router: RouterIntegration) => (props: Base
   )
 }
 
+/**
+ * 可以在所有路由组件外面套一层，用于处理一些公共逻辑
+ */
 function Root(props: {
   routerState: RouterContext
   root?: Component<RouteSectionProps>
@@ -119,6 +122,7 @@ function Routes(props: { routerState: RouterContext; branches: Branch[] }) {
   let root: RouteContext | undefined
 
   const routeStates = createMemo(
+    // 监听当前匹配到的路由 matches
     on(props.routerState.matches, (nextMatches, prevMatches, prev: RouteContext[] | undefined) => {
       let equal = prevMatches && nextMatches.length === prevMatches.length
       const next: RouteContext[] = []
@@ -134,6 +138,7 @@ function Routes(props: { routerState: RouterContext; branches: Branch[] }) {
             disposers[i]()
           }
 
+          // 每一个路由都是一个 Root
           createRoot(dispose => {
             disposers[i] = dispose
             next[i] = createRouteContext(
@@ -158,6 +163,10 @@ function Routes(props: { routerState: RouterContext; branches: Branch[] }) {
   return createOutlet(() => routeStates() && root)()
 }
 
+/**
+ * 利用 createOutlet 创建一个动态的路由组件
+ * 当匹配到的路由发生变化时，会重新渲染
+ */
 const createOutlet = (child: () => RouteContext | undefined) => {
   return () => (
     <Show when={child()} keyed>

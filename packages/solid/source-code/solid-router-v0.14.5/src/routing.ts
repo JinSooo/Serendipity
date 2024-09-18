@@ -213,6 +213,7 @@ export function createBranches(
 
 export function getRouteMatches(branches: Branch[], location: string): RouteMatch[] {
   for (let i = 0, len = branches.length; i < len; i++) {
+    // 调用 Branch 里封装的 matcher 方法去匹配判断是否是对应路由
     const match = branches[i].matcher(location)
     if (match) {
       return match
@@ -282,6 +283,9 @@ export function createRouterContext(
   getContext?: () => any,
   options: { base?: string; singleFlight?: boolean; transformUrl?: (url: string) => string } = {},
 ): RouterContext {
+  // 这里的 signal 来自最外层的 createRouter 上
+  // 而最终的值会归宿到 createRouter 的参数的 get、set 两个方法上
+  // 里面利用的 intercept 对 createSignal 进行拦截处理
   const {
     signal: [source, setSource],
     utils = {},
@@ -333,9 +337,9 @@ export function createRouterContext(
       })
     })
   }
-  // location
+  // url + window.location.hash
   const [reference, setReference] = createSignal(source().value)
-  // location 所包含的 state
+  // window.history.state
   const [state, setState] = createSignal(source().state)
   // 封装 location.href，进行响应式处理
   const location = createLocation(reference, state)
@@ -351,7 +355,7 @@ export function createRouterContext(
     return getRouteMatches(branches(), location.pathname)
   })
 
-  // 获取路由参数
+  // 匹配路由信息的参数
   const params = createMemoObject(() => {
     const m = matches()
     const params: Params = {}
@@ -372,6 +376,7 @@ export function createRouterContext(
   }
 
   // Create a native transition, when source updates
+  // 监听当 source（location url）出现变化的时候，进行路由跳转
   createRenderEffect(on(source, source => transition('native', source), { defer: true }))
 
   return {
@@ -514,6 +519,7 @@ export function createRouteContext(
   const data = preload ? preload({ params, location, intent: intent || 'initial' }) : undefined
   inPreloadFn = false
 
+  // 返回一个封装好的 RouteContext
   const route: RouteContext = {
     parent,
     pattern,
