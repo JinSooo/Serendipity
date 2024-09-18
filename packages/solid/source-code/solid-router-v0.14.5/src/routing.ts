@@ -1,4 +1,4 @@
-import { JSX, Accessor, runWithOwner, batch } from 'solid-js'
+import { type JSX, type Accessor, runWithOwner, batch } from 'solid-js'
 import {
   createComponent,
   createContext,
@@ -117,7 +117,7 @@ export const useBeforeLeave = (listener: (e: BeforeLeaveEventArgs) => void) => {
   onCleanup(s)
 }
 
-export function createRoutes(routeDef: RouteDefinition, base: string = ''): RouteDescription[] {
+export function createRoutes(routeDef: RouteDefinition, base = ''): RouteDescription[] {
   const { component, preload, load, children, info } = routeDef
   const isLeaf = !children || (Array.isArray(children) && !children.length)
 
@@ -149,7 +149,7 @@ export function createRoutes(routeDef: RouteDefinition, base: string = ''): Rout
   }, [])
 }
 
-export function createBranch(routes: RouteDescription[], index: number = 0): Branch {
+export function createBranch(routes: RouteDescription[], index = 0): Branch {
   return {
     routes,
     score: scoreRoute(routes[routes.length - 1]) * 10000 - index,
@@ -177,7 +177,7 @@ function asArray<T>(value: T | T[]): T[] {
 
 export function createBranches(
   routeDef: RouteDefinition | RouteDefinition[],
-  base: string = '',
+  base = '',
   stack: RouteDescription[] = [],
   branches: Branch[] = [],
 ): Branch[] {
@@ -189,15 +189,19 @@ export function createBranches(
       if (!def.hasOwnProperty('path')) def.path = ''
       const routes = createRoutes(def, base)
       for (const route of routes) {
+        // stack 用于存储当前的路由信息，并通过递归的方式，将当前的路由信息存储在 stack 中
         stack.push(route)
         const isEmptyArray = Array.isArray(def.children) && def.children.length === 0
         if (def.children && !isEmptyArray) {
           createBranches(def.children, route.pattern, stack, branches)
         } else {
+          // 无 children 的则创建一个分支，然后直接添加到 branches 中
+          // 反之，则递归调用 createBranches 函数，继续创建分支，直到叶子节点，再添加到 branches 中
           const branch = createBranch([...stack], branches.length)
           branches.push(branch)
         }
 
+        // 一条分支处理完成后，将当前的路由信息从 stack 中弹出
         stack.pop()
       }
     }
@@ -294,6 +298,7 @@ export function createRouterContext(
     setSource({ value: basePath, replace: true, scroll: false })
   }
 
+  // 路由跳转过程ing
   const [isRouting, setIsRouting] = createSignal(false)
 
   // Keep track of last target, so that last call to transition wins
@@ -328,12 +333,16 @@ export function createRouterContext(
       })
     })
   }
+  // location
   const [reference, setReference] = createSignal(source().value)
+  // location 所包含的 state
   const [state, setState] = createSignal(source().state)
+  // 封装 location.href，进行响应式处理
   const location = createLocation(reference, state)
   const referrers: LocationChange[] = []
   const submissions = createSignal<Submission<any, any>[]>(isServer ? initFromFlash() : [])
 
+  // 当前匹配的路由信息
   const matches = createMemo(() => {
     if (typeof options.transformUrl === 'function') {
       return getRouteMatches(branches(), options.transformUrl(location.pathname))
@@ -342,6 +351,7 @@ export function createRouterContext(
     return getRouteMatches(branches(), location.pathname)
   })
 
+  // 获取路由参数
   const params = createMemoObject(() => {
     const m = matches()
     const params: Params = {}
@@ -351,6 +361,7 @@ export function createRouterContext(
     return params
   })
 
+  // 基础路由信息
   const baseRoute: RouteContext = {
     pattern: basePath,
     path: () => basePath,
@@ -454,7 +465,7 @@ export function createRouterContext(
     const matches = getRouteMatches(branches(), url.pathname)
     const prevIntent = intent
     intent = 'preload'
-    for (let match in matches) {
+    for (const match in matches) {
       const { route, params } = matches[match]
       route.component &&
         (route.component as MaybePreloadableComponent).preload &&

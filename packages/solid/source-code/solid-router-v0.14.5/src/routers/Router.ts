@@ -13,8 +13,12 @@ export type RouterProps = BaseRouterProps & {
   preload?: boolean
 }
 
+/**
+ * Router 组件最终调用的是 createRouter 函数
+ */
 export function Router(props: RouterProps): JSX.Element {
   if (isServer) return StaticRouter(props)
+  // 通过 location 和 history 获取当前路由信息
   const getSource = () => {
     const url = window.location.pathname.replace(/^\/+/, '/') + window.location.search
     const state =
@@ -26,9 +30,11 @@ export function Router(props: RouterProps): JSX.Element {
       state,
     }
   }
+  // 在离开当前路由前执行一些操作
   const beforeLeave = createBeforeLeave()
   return createRouter({
     get: getSource,
+    // 通过 replace 和 state 去更新 history
     set({ value, replace, scroll, state }) {
       if (replace) {
         window.history.replaceState(keepDepth(state), '', value)
@@ -38,6 +44,7 @@ export function Router(props: RouterProps): JSX.Element {
       scrollToHash(decodeURIComponent(window.location.hash.slice(1)), scroll)
       saveCurrentDepth()
     },
+    // 监听 popstate 事件，当发生 popstate 事件时，执行 notify 函数
     init: notify =>
       bindEvent(
         window,

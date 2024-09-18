@@ -40,12 +40,19 @@ export type BaseRouterProps = {
 
 export const createRouterComponent = (router: RouterIntegration) => (props: BaseRouterProps) => {
   const { base } = props
+  /**
+   * 获取路由定义，有两种形式
+   * 1. 直接传入 RouteDefinition 或 RouteDefinition[]
+   * 2. 传入 Route 组件，通过 children 获取
+   */
   const routeDefs = children(() => props.children as JSX.Element) as unknown as () =>
     | RouteDefinition
     | RouteDefinition[]
 
+  // 根据路由信息生成路由分支
   const branches = createMemo(() => createBranches(routeDefs(), props.base || ''))
   let context: Owner
+  // 包含一系列路由相关的状态信息
   const routerState = createRouterContext(router, branches, () => context, {
     base,
     singleFlight: props.singleFlight,
