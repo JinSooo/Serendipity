@@ -47,6 +47,8 @@ export function extractSearchParams(url: URL): Params {
 }
 
 export function createMatcher<S extends string>(path: S, partial?: boolean, matchFilters?: MatchFilters<S>) {
+  // partial 表示是否允许部分匹配
+  // splat 表示通配符
   const [pattern, splat] = path.split('/*', 2)
   const segments = pattern.split('/').filter(Boolean)
   const len = segments.length
@@ -54,6 +56,8 @@ export function createMatcher<S extends string>(path: S, partial?: boolean, matc
   return (location: string): PathMatch | null => {
     const locSegments = location.split('/').filter(Boolean)
     const lenDiff = locSegments.length - len
+    // 1. 路径长度不匹配
+    // 2. 路径长度不匹配，没有通配符，且不允许部分匹配
     if (lenDiff < 0 || (lenDiff > 0 && splat === undefined && !partial)) {
       return null
     }
@@ -66,20 +70,26 @@ export function createMatcher<S extends string>(path: S, partial?: boolean, matc
     const matchFilter = (s: string) =>
       matchFilters === undefined ? undefined : (matchFilters as Record<string, MatchFilter>)[s]
 
+    // 遍历 segments 和 locSegments 进行匹配
     for (let i = 0; i < len; i++) {
       const segment = segments[i]
       const locSegment = locSegments[i]
+      // 是否是动态路由（:id）
       const dynamic = segment[0] === ':'
+      // 动态路由的 key
       const key = dynamic ? segment.slice(1) : segment
 
       if (dynamic && matchSegment(locSegment, matchFilter(key))) {
+        // 动态路由匹配，提取参数
         match.params[key] = locSegment
       } else if (dynamic || !matchSegment(locSegment, segment)) {
         return null
       }
       match.path += `/${locSegment}`
     }
+    // 到这里说明匹配成功了
 
+    // 如果存在通配符，那么将剩余的路径都作为通配符的参数
     if (splat) {
       const remainder = lenDiff ? locSegments.slice(-lenDiff).join('/') : ''
       if (matchSegment(remainder, matchFilter(splat))) {
@@ -89,6 +99,7 @@ export function createMatcher<S extends string>(path: S, partial?: boolean, matc
       }
     }
 
+    // 返回匹配结果
     return match
   }
 }

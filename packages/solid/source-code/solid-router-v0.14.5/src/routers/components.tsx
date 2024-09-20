@@ -131,6 +131,7 @@ function Routes(props: { routerState: RouterContext; branches: Branch[] }) {
         const nextMatch = nextMatches[i]
 
         if (prev && prevMatch && nextMatch.route.key === prevMatch.route.key) {
+          // 复用
           next[i] = prev[i]
         } else {
           equal = false
@@ -144,6 +145,7 @@ function Routes(props: { routerState: RouterContext; branches: Branch[] }) {
             next[i] = createRouteContext(
               props.routerState,
               next[i - 1] || props.routerState.base,
+              // 路由嵌套
               createOutlet(() => routeStates()[i + 1]),
               () => props.routerState.matches()[i],
             )
@@ -186,6 +188,9 @@ export type RouteProps<S extends string, T = unknown> = {
   load?: RoutePreloadFunc<T>
 }
 
+/**
+ * 单个路由组件，返回一个路由配置对象
+ */
 export const Route = <S extends string, T = unknown>(props: RouteProps<S, T>) => {
   const childRoutes = children(() => props.children)
   return mergeProps(props, {

@@ -128,9 +128,12 @@ export function createRoutes(routeDef: RouteDefinition, base = ''): RouteDescrip
     info,
   }
 
+  // routeDef.path 路径支持数组形式
   return asArray(routeDef.path).reduce<RouteDescription[]>((acc, originalPath) => {
+    // expandOptionals 找到所有可能的路由路径
     for (const expandedPath of expandOptionals(originalPath)) {
       const path = joinPaths(base, expandedPath)
+      // pattern 用于 matcher 做后续的路由匹配使用
       let pattern = isLeaf ? path : path.split('/*', 1)[0]
       pattern = pattern
         .split('/')
@@ -343,6 +346,7 @@ export function createRouterContext(
   const [state, setState] = createSignal(source().state)
   // 封装 location.href，进行响应式处理
   const location = createLocation(reference, state)
+  // 存储 navigate 跳转前的路由信息
   const referrers: LocationChange[] = []
   const submissions = createSignal<Submission<any, any>[]>(isServer ? initFromFlash() : [])
 
@@ -394,6 +398,7 @@ export function createRouterContext(
     submissions,
   }
 
+  // 路由跳转
   function navigateFromRoute(route: RouteContext, to: string | number, options?: Partial<NavigateOptions>) {
     // Untrack in case someone navigates in an effect - don't want to track `reference` or route paths
     untrack(() => {
@@ -401,6 +406,7 @@ export function createRouterContext(
         if (!to) {
           // A delta of 0 means stay at the current location, so it is ignored
         } else if (utils.go) {
+          // utils.go 是最上层 Router 里实现的
           utils.go(to)
         } else {
           console.warn('Router integration does not support relative routing')
@@ -438,7 +444,9 @@ export function createRouterContext(
           e && (e.response = { status: 302, headers: new Headers({ Location: resolvedTo }) })
           setSource({ value: resolvedTo, replace, scroll, state: nextState })
         } else if (beforeLeave.confirm(resolvedTo, options)) {
+          // 路由跳转前，将当前的路由信息存储在 referrers 中
           referrers.push({ value: current, replace, scroll, state: state() })
+          // 进行路由跳转
           transition('navigate', {
             value: resolvedTo,
             state: nextState,
@@ -448,12 +456,14 @@ export function createRouterContext(
     })
   }
 
+  // 封装 navigator 方法
   function navigatorFactory(route?: RouteContext): Navigator {
     // Workaround for vite issue (https://github.com/vitejs/vite/issues/3803)
     route = route || useContext(RouteContextObj) || baseRoute
     return (to: string | number, options?: Partial<NavigateOptions>) => navigateFromRoute(route!, to, options)
   }
 
+  // 路由跳转结束，更新 source 信息
   function navigateEnd(next: LocationChange) {
     const first = referrers[0]
     if (first) {

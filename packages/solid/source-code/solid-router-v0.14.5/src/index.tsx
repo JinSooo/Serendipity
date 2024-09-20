@@ -1,6 +1,21 @@
+/**
+ * Router
+ */
 export * from './routers/index.js'
+
+/**
+ * <A />, <Link />...
+ */
 export * from './components.jsx'
+
+/**
+ * createBeforeLeave...
+ */
 export * from './lifecycle.js'
+
+/**
+ * Hook
+ */
 export {
   useHref,
   useIsRouting,
