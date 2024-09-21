@@ -52,10 +52,16 @@ const MAX_REDIRECTS = 100
 export const RouterContextObj = createContext<RouterContext>()
 export const RouteContextObj = createContext<RouteContext>()
 
+/**
+ * 获取 RouterContext 上下文
+ */
 export const useRouter = () =>
   invariant(useContext(RouterContextObj), "<A> and 'use' router primitives can be only used inside a Route.")
 
 let TempRoute: RouteContext | undefined
+/**
+ * 获取 RouteContext 上下文
+ */
 export const useRoute = () => TempRoute || useContext(RouteContextObj) || useRouter().base
 
 export const useResolvedPath = (path: () => string) => {
@@ -155,6 +161,7 @@ export function createRoutes(routeDef: RouteDefinition, base = ''): RouteDescrip
 export function createBranch(routes: RouteDescription[], index = 0): Branch {
   return {
     routes,
+    // score 用于计算权重
     score: scoreRoute(routes[routes.length - 1]) * 10000 - index,
     matcher(location) {
       const matches: RouteMatch[] = []
@@ -476,6 +483,9 @@ export function createRouterContext(
     }
   }
 
+  /**
+   * 预加载路由
+   */
   function preloadRoute(url: URL, options: { preloadData?: boolean } = {}) {
     const matches = getRouteMatches(branches(), url.pathname)
     const prevIntent = intent
@@ -514,6 +524,9 @@ export function createRouterContext(
   }
 }
 
+/**
+ * 创建 RouteContext
+ */
 export function createRouteContext(
   router: RouterContext,
   parent: RouteContext,

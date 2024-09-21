@@ -5,11 +5,17 @@ const hasSchemeRegex = /^(?:[a-z0-9]+:)?\/\//i
 const trimPathRegex = /^\/+|(\/)\/+$/g
 export const mockBase = 'http://sr'
 
+/**
+ * 规范化路由路径，去除路径中的多余斜杠，或添加斜杠
+ */
 export function normalizePath(path: string, omitSlash: boolean = false) {
   const s = path.replace(trimPathRegex, '$1')
   return s ? (omitSlash || /^[?#]/.test(s) ? s : '/' + s) : ''
 }
 
+/**
+ * 解析路径
+ */
 export function resolvePath(base: string, path: string, from?: string): string | undefined {
   if (hasSchemeRegex.test(path)) {
     return undefined
@@ -34,10 +40,16 @@ export function invariant<T>(value: T | null | undefined, message: string): T {
   return value
 }
 
+/**
+ * 拼接路径
+ */
 export function joinPaths(from: string, to: string): string {
   return normalizePath(from).replace(/\/*(\*.*)?$/g, '') + normalizePath(to)
 }
 
+/**
+ * 提取路径中的参数
+ */
 export function extractSearchParams(url: URL): Params {
   const params: Params = {}
   url.searchParams.forEach((value, key) => {
@@ -104,6 +116,9 @@ export function createMatcher<S extends string>(path: S, partial?: boolean, matc
   }
 }
 
+/**
+ * 匹配路径
+ */
 function matchSegment(input: string, filter?: string | MatchFilter): boolean {
   const isEqual = (s: string) => s.localeCompare(input, undefined, { sensitivity: 'base' }) === 0
 
@@ -125,11 +140,16 @@ export function scoreRoute(route: RouteDescription): number {
   const [pattern, splat] = route.pattern.split('/*', 2)
   const segments = pattern.split('/').filter(Boolean)
   return segments.reduce(
+    // :id 这种动态路由的权重为 2，其他为 3
     (score, segment) => score + (segment.startsWith(':') ? 2 : 3),
+    // 而通配符的权重为 1
     segments.length - (splat === undefined ? 0 : 1),
   )
 }
 
+/**
+ * 创建一个响应式对象
+ */
 export function createMemoObject<T extends Record<string | symbol, unknown>>(fn: () => T): T {
   const map = new Map()
   const owner = getOwner()!
@@ -157,6 +177,9 @@ export function createMemoObject<T extends Record<string | symbol, unknown>>(fn:
   })
 }
 
+/**
+ * 合并路径中的参数，转换成 query string
+ */
 export function mergeSearchString(search: string, params: SetParams) {
   const merged = new URLSearchParams(search)
   Object.entries(params).forEach(([key, value]) => {
@@ -170,6 +193,9 @@ export function mergeSearchString(search: string, params: SetParams) {
   return s ? `?${s}` : ''
 }
 
+/**
+ * 根据路由路径，生成所有可能的路由路径
+ */
 export function expandOptionals(pattern: string): string[] {
   let match = /(\/?\:[^\/]+)\?/.exec(pattern)
   if (!match) return [pattern]
