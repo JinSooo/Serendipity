@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.5.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/1.9.2/schema.json",
   "files": {
     "ignore": [
       "dist/*",
@@ -56,7 +56,7 @@
       "quoteStyle": "single",
       "jsxQuoteStyle": "single",
       "semicolons": "asNeeded",
-      "trailingComma": "all",
+      "trailingCommas": "all",
       "arrowParentheses": "asNeeded",
       "bracketSpacing": true,
       "quoteProperties": "asNeeded"
