@@ -1,5 +1,8 @@
 import type { RouterResponseInit, CustomResponse } from '../types'
 
+/**
+ * 重定向，返回一个 Response 对象，其中 Location 头被设置为指定的 URL。
+ */
 export function redirect(url: string, init: number | RouterResponseInit = 302) {
   let responseInit: ResponseInit
   let revalidate: string | string[] | undefined
@@ -24,6 +27,9 @@ export function redirect(url: string, init: number | RouterResponseInit = 302) {
   return response as CustomResponse<never>
 }
 
+/**
+ * 重新加载，返回一个 Response 对象
+ */
 export function reload(init: RouterResponseInit = {}) {
   const { revalidate, ...responseInit } = init
   const headers = new Headers(responseInit.headers)
@@ -35,6 +41,9 @@ export function reload(init: RouterResponseInit = {}) {
   }) as CustomResponse<never>
 }
 
+/**
+ * 返回一个包含 JSON 数据的 Response 对象
+ */
 export function json<T>(data: T, init: RouterResponseInit = {}) {
   const { revalidate, ...responseInit } = init
   const headers = new Headers(responseInit.headers)

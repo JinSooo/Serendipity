@@ -218,7 +218,17 @@ export interface MaybePreloadableComponent extends Component {
   preload?: () => void
 }
 
-export type CacheEntry = [number, any, Intent | undefined, Signal<number> & { count: number }]
+export type CacheEntry = [
+  /** 缓存时间，0 表示不缓存 */
+  number,
+  /** 缓存数据 */
+  any,
+  /** 缓存意图 */
+  Intent | undefined,
+  /** 缓存信号（做响应式处理），count 表示缓存命中次数 */
+  Signal<number> & { count: number }
+]
+
 
 export type NarrowResponse<T> = T extends CustomResponse<infer U> ? U : Exclude<T, Response>
 export type RouterResponseInit = Omit<ResponseInit, 'body'> & { revalidate?: string | string[] }

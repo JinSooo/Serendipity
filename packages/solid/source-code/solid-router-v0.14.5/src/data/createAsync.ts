@@ -41,6 +41,7 @@ export function createAsync<T>(
 ): AccessorWithLatest<T | undefined> {
   let resource: () => T
   let prev = () => (!resource || (resource as any).state === 'unresolved' ? undefined : (resource as any).latest)
+  // 内部就是使用 createResource 创建一个资源
   ;[resource] = createResource(
     () => subFetch(fn, untrack(prev)),
     v => v,
@@ -92,6 +93,7 @@ export function createAsyncStore<T>(
     v => v,
     {
       ...options,
+      // 利用 storage 去存储数据
       storage: (init: T | undefined) => createDeepSignal(init, options.reconcile),
     } as any,
   )
@@ -106,6 +108,9 @@ export function createAsyncStore<T>(
   return resultAccessor
 }
 
+/**
+ * 将 createStore 转换成一种 createSignal 的变体
+ */
 function createDeepSignal<T>(value: T | undefined, options?: ReconcileOptions) {
   const [store, setStore] = createStore({
     value: structuredClone(value),
@@ -152,7 +157,10 @@ class MockPromise {
 }
 
 function subFetch<T>(fn: (prev: T | undefined) => Promise<T>, prev: T | undefined) {
+  // 正常直接走
   if (isServer || !sharedConfig.context) return fn(prev)
+
+  // 服务端的话，替换 fetch 和 Promise，阻止请求
   const ogFetch = fetch
   const ogPromise = Promise
   try {

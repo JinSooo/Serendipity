@@ -355,6 +355,7 @@ export function createRouterContext(
   const location = createLocation(reference, state)
   // 存储 navigate 跳转前的路由信息
   const referrers: LocationChange[] = []
+  // 存储所有已注册的 Action 的状态信息
   const submissions = createSignal<Submission<any, any>[]>(isServer ? initFromFlash() : [])
 
   // 当前匹配的路由信息

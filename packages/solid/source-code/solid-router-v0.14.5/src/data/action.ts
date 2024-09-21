@@ -14,8 +14,13 @@ export type Action<T extends Array<any>, U> = (T extends [FormData] | [] ? JSX.S
     ): Action<B, U>
   }
 
+/** 存储所有已注册的 Action */
 export const actions = /* #__PURE__ */ new Map<string, Action<any, any>>()
 
+/**
+ * 获取 Action 的 submissions 信息，并返回一个代理对象
+ * 可以获取到当前 action 的状态信息
+ */
 export function useSubmissions<T extends Array<any>, U>(
   fn: Action<T, U>,
   filter?: (arg: T) => boolean,
@@ -74,6 +79,7 @@ export function action<T extends Array<any>, U = void>(fn: (...args: T) => Promi
         return result.data
       }
     }
+    // 将当前 action 的状态信息添加到 submissions 中
     router.submissions[1](s => [
       ...s,
       (submission = {
@@ -108,6 +114,9 @@ export function action<T extends Array<any>, U = void>(fn: (...args: T) => Promi
   return toAction(mutate, url)
 }
 
+/**
+ * 将函数转换为 Action，添加一下额外的方法
+ */
 function toAction<T extends Array<any>, U>(fn: Function, url: string): Action<T, U> {
   fn.toString = () => {
     if (!url) throw new Error('Client Actions need explicit names if server rendered')
@@ -134,21 +143,27 @@ function toAction<T extends Array<any>, U>(fn: Function, url: string): Action<T,
 
 const hashString = (s: string) => s.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)
 
+/**
+ * 处理 action 的响应结果
+ */
 async function handleResponse(response: unknown, error: boolean | undefined, navigate: Navigator) {
   let data: any
   let custom: any
   let keys: string[] | undefined
   let flightKeys: string[] | undefined
   if (response instanceof Response) {
+    // X-Revalidate: Used to invalidate cache keys.
     if (response.headers.has('X-Revalidate')) keys = response.headers.get('X-Revalidate')!.split(',')
     if ((response as any).customBody) {
       data = custom = await (response as any).customBody()
+      // X-Single-Flight: Used to indicate that the response is a single flight response.
       if (response.headers.has('X-Single-Flight')) {
         data = data._$value
         delete custom._$value
         flightKeys = Object.keys(custom)
       }
     }
+    // 处理重定向内容
     if (response.headers.has('Location')) {
       const locationUrl = response.headers.get('Location') || '/'
       if (locationUrl.startsWith('http')) {
@@ -157,8 +172,10 @@ async function handleResponse(response: unknown, error: boolean | undefined, nav
         navigate(locationUrl)
       }
     }
+    // 处理错误内容
   } else if (error) return { error: response }
   else data = response
+  // 处理缓存内容
   // invalidate
   cacheKeyOp(keys, entry => (entry[0] = 0))
   // set cache

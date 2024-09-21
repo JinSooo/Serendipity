@@ -27,16 +27,23 @@ function getCache() {
   return (req.router || (req.router = {})).cache || (req.router.cache = new Map())
 }
 
+/**
+ * 强制重新验证缓存
+ */
 export function revalidate(key?: string | string[] | void, force = true) {
   return startTransition(() => {
     const now = Date.now()
     cacheKeyOp(key, entry => {
       force && (entry[0] = 0) //force cache miss
+      // entry[3] -> Signal
       entry[3][1](now) // retrigger live signals
     })
   })
 }
 
+/**
+ * 对指定的 Key 进行操作
+ */
 export function cacheKeyOp(key: string | string[] | void, fn: (cacheEntry: CacheEntry) => void) {
   key && !Array.isArray(key) && (key = [key])
   for (let k of cacheMap.keys()) {
@@ -203,6 +210,10 @@ function matchKey(key: string, keys: string[]) {
 
 // Modified from the amazing Tanstack Query library (MIT)
 // https://github.com/TanStack/query/blob/main/packages/query-core/src/utils.ts#L168
+/**
+ * 转换成 hashKey，主要是针对对象，进行排序，然后转换成字符串
+ * 这样就可以保证相同的对象，转换后的 hashKey 是一样的
+ */
 export function hashKey<T extends Array<any>>(args: T): string {
   return JSON.stringify(args, (_, val) =>
     isPlainObject(val)
