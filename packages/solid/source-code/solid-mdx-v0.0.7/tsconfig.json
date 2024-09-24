@@ -1,0 +1,13 @@
+{
+  "extends": "@vinxi/tsconfig/base.json",
+  "include": ["./src"],
+  "compilerOptions": {
+    "outDir": "./types",
+    "rootDir": "./src",
+    "target": "ES2015",
+    "esModuleInterop": true,
+    "downlevelIteration": true,
+    "lib": ["dom", "esnext"]
+  },
+  "exclude": ["dist", "build", "node_modules"]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "example-with-authjs",
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "esbuild": "^0.20.2",
+    "next-auth": "^4.24.7",
+    "postcss": "^8.4.38",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.8"
+  },
+  "dependencies": {
+    "@auth/core": "^0.29.0",
+    "@babel/core": "7.24.4",
+    "@solid-mediakit/auth": "^2.0.11",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.14.1",
+    "@solidjs/start": "^1.0.6",
+    "solid-js": "^1.8.18",
+    "vinxi": "^0.4.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
