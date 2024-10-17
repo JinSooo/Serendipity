@@ -33,6 +33,11 @@ export const routes: RouteDefinition[] = [
     data: AboutData,
   },
   {
+    path: '/props',
+    component: lazy(() => import('../pages/props')),
+    data: AboutData,
+  },
+  {
     path: '**',
     component: lazy(() => import('../pages/404')),
   },
