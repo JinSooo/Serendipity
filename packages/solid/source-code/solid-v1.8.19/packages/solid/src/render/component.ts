@@ -245,26 +245,36 @@ export function mergeProps<T extends unknown[]>(...sources: T): MergeProps<T> {
     for (let i = sourceKeys.length - 1; i >= 0; i--) {
       const key = sourceKeys[i];
       if (key === "__proto__" || key === "constructor") continue;
+      // props 中的 Signal 是包含 get 的属性描述符的
       const desc = Object.getOwnPropertyDescriptor(source, key)!;
       if (!defined[key]) {
         defined[key] = desc.get
           ? {
               enumerable: true,
               configurable: true,
+              // 注意，这里将 desc.get 绑定到 source 上，这样在 resolveSources 的时候，就可以通过 source 访问到对应的 key 的值
+              // 这里注意， sourceMap[key] 是数组，所以 resolveSources 的时候，会遍历 sourceMap[key]，执行对应的 get 方法
+              // 同时，因为是数组，所以如果定义了多个同名 key 的 props，会执行多次，会执行 Signal 的响应式和默认值处理。
               get: resolveSources.bind((sourcesMap[key] = [desc.get.bind(source)]))
             }
           : desc.value !== undefined
           ? desc
           : undefined;
       } else {
+        // 这里正常是用来处理多个同名 key 的 props 的，比如：
+        // const mergedProps = mergeProps({name: 'default'}, props)
+        // 这里就会将 name 添加到 sourcesMap[name] 中
         const sources = sourcesMap[key];
         if (sources) {
+          // 合并 props 走这里，因为存在不同的 desc.get
           if (desc.get) sources.push(desc.get.bind(source));
+          // 合并 默认值 走这里，将 desc.value 添加到 source 上
           else if (desc.value !== undefined) sources.push(() => desc.value);
         }
       }
     }
   }
+  // 最后做统一合并
   const target: Record<string, any> = {};
   const definedKeys = Object.keys(defined);
   for (let i = definedKeys.length - 1; i >= 0; i--) {
@@ -338,6 +348,7 @@ export function splitProps<
     const desc = Object.getOwnPropertyDescriptor(props, propName)!;
     const isDefaultDesc =
       !desc.get && !desc.set && desc.enumerable && desc.writable && desc.configurable;
+    // 利用 keys 进行划分，将 propName 划分到对应的 objects 中
     let blocked = false;
     let objectIndex = 0;
     for (const k of keys) {
