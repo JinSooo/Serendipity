@@ -25,5 +25,8 @@
     "Antd",
     "dunhuang",
     "immer"
-  ]
+  ],
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
