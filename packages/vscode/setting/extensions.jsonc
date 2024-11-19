@@ -1,0 +1,30 @@
+{
+  "recommendations": [
+    // theme & icons
+    "akamud.vscode-theme-onelight",
+    "antfu.icons-carbon",
+    "catppuccin.catppuccin-vsc-icons",
+    "zhuangtongfa.material-theme",
+
+    // utils
+    "gruntfuggly.todo-tree",
+    "alefragnani.bookmarks",
+    "chakrounanas.turbo-console-log",
+    "meganrogge.template-string-converter",
+    "ritwickdey.liveserver",
+    "shardulm94.trailing-spaces",
+    "stackbreak.comment-divider",
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+
+    // special
+    "antfu.unocss",
+    "biomejs.biome",
+    "eamodio.gitlens",
+    "vue.volar",
+    "editorconfig.editorconfig",
+
+    "anysphere.pyright",
+    "esbenp.prettier-vscode"
+  ]
+}
