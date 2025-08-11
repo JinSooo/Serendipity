@@ -9,7 +9,8 @@
       "dom-expressions-v0.23.0/*",
       "solid-router-v0.14.5/*",
       "solid-start-v1.0.6/*",
-      "solid-mdx-v0.0.7/*"
+      "solid-mdx-v0.0.7/*",
+      "alien-signals-v2.0.6/*"
     ]
   },
   "organizeImports": {
