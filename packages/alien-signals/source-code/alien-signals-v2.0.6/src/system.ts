@@ -1,3 +1,4 @@
+/** 响应式节点 */
 export interface ReactiveNode {
 	deps?: Link;
 	depsTail?: Link;
@@ -6,6 +7,7 @@ export interface ReactiveNode {
 	flags: ReactiveFlags;
 }
 
+/** 链表结构（用于依赖和子节点） */
 export interface Link {
 	version: number;
 	dep: ReactiveNode;
@@ -21,13 +23,20 @@ interface Stack<T> {
 	prev: Stack<T> | undefined;
 }
 
+/** 标志：响应式节点状态 */
 export enum ReactiveFlags {
 	None = 0,
+	/** 响应式标志 */
 	Mutable = 1 << 0,
+	/** 节点被监听 */
 	Watching = 1 << 1,
+	/** 依赖检测 */
 	RecursedCheck = 1 << 2,
+	/** 是否是递归依赖链的一部分 */
 	Recursed = 1 << 3,
+	/** 脏数据，需要更新 */
 	Dirty = 1 << 4,
+	/** 等待更新调度，还没执行 */
 	Pending = 1 << 5,
 }
 
@@ -36,8 +45,11 @@ export function createReactiveSystem({
 	notify,
 	unwatched,
 }: {
+	/** 处理节点更新（当节点需要重新计算） */
 	update(sub: ReactiveNode): boolean;
+	/** 触发副作用（当节点改变时，通知观察者） */
 	notify(sub: ReactiveNode): void;
+	/** 清除函数（当节点不再被任何观察者监听） */
 	unwatched(sub: ReactiveNode): void;
 }) {
 	let currentVersion = 0;
@@ -236,8 +248,8 @@ export function createReactiveSystem({
 				const firstSub = sub.subs!;
 				const hasMultipleSubs = firstSub.nextSub !== undefined;
 				if (hasMultipleSubs) {
-					link = stack!.value;
-					stack = stack!.prev;
+					link = stack?.value;
+					stack = stack?.prev;
 				} else {
 					link = firstSub;
 				}
