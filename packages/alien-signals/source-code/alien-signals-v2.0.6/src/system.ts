@@ -1,20 +1,49 @@
 /** 响应式节点 */
 export interface ReactiveNode {
+  /** 依赖链表，指向该节点依赖的其他节点（链表头） */
 	deps?: Link;
+	/** 依赖链表，指向该节点依赖的其他节点（链表尾） */
 	depsTail?: Link;
+	/** 订阅链表，指向该节点被哪些节点依赖（链表头）（订阅该节点的其他节点） */
 	subs?: Link;
+	/** 订阅链表，指向该节点被哪些节点依赖（链表尾）（订阅该节点的其他节点） */
 	subsTail?: Link;
+	/** 标志：响应式节点状态 */
 	flags: ReactiveFlags;
 }
 
+/**
+ * Link 里面的内容就是 sub 和 dep 之间两个链表的关系（依赖链表，订阅链表）
+ * Link 里面最基本的就是 sub 和 dep 两个节点，实现了最基本的关系 sub -> dep
+ * - 依赖链表：指向 sub 的双向链表（从订阅者的角度）
+ * - 订阅链表：指向 dep 的双向链表（从被依赖者的角度）
+ */
 /** 链表结构（用于依赖和子节点） */
 export interface Link {
+  /** 版本号，追踪依赖和订阅的版本 */
 	version: number;
+  // dep 和 sub 两个字段建立了基本的依赖关系：sub 依赖于 dep。
+	/** 被依赖的节点（数据源） */
 	dep: ReactiveNode;
+	/** 订阅者节点（数据消费者） */
 	sub: ReactiveNode;
+  /**
+   * 订阅者链表方向（从被依赖者角度）：
+   *  prevSub: 指向同一个被依赖者的上一个订阅者链接
+   *  nextSub: 指向同一个被依赖者的下一个订阅者链接
+   */
+	/** 指向同一依赖的上一个订阅者链接 */
 	prevSub: Link | undefined;
+	/** 指向同一依赖的下一个订阅者链接 */
 	nextSub: Link | undefined;
+  /**
+   * 依赖链表方向（从订阅者角度）：
+   *  prevDep: 指向同一个订阅者的上一个依赖链接
+   *  nextDep: 指向同一个订阅者的下一个依赖链接
+   */
+	/** 指向同一订阅者的上一个依赖链接 */
 	prevDep: Link | undefined;
+	/** 指向同一订阅者的下一个依赖链接 */
 	nextDep: Link | undefined;
 }
 
@@ -63,24 +92,33 @@ export function createReactiveSystem({
 		shallowPropagate,
 	};
 
+  // 订阅依赖，sub -> dep（实现 O(1) 插入）
 	function link(dep: ReactiveNode, sub: ReactiveNode): void {
-		const prevDep = sub.depsTail;
+    // prevDep 指向 sub 的依赖链表的原链尾
+    const prevDep = sub.depsTail;
+    // 检查是否已经存在依赖关系，如果存在，则直接返回
 		if (prevDep !== undefined && prevDep.dep === dep) {
 			return;
 		}
+    // nextDep 指向 sub 的依赖链表的链头
 		const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
+    // 检查是否已经存在依赖关系，如果存在，则直接返回
 		if (nextDep !== undefined && nextDep.dep === dep) {
 			nextDep.version = currentVersion;
 			sub.depsTail = nextDep;
 			return;
 		}
+    // prevSub 指向 dep 的订阅链表的原链尾
 		const prevSub = dep.subsTail;
+    // 检查是否已经存在订阅关系，如果存在，则直接返回
 		if (prevSub !== undefined && prevSub.version === currentVersion && prevSub.sub === sub) {
 			return;
 		}
+    // 创建新的 Link
 		const newLink
 			= sub.depsTail
 			= dep.subsTail
+      // Link 里面的内容就是 sub 和 dep 之间两个链表的关系（依赖链表，订阅链表）
 			= {
 				version: currentVersion,
 				dep,
