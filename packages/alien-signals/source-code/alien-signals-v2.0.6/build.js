@@ -21,6 +21,7 @@ const typesProgram = ts.createProgram({
 		outDir: 'types',
 		declaration: true,
 		emitDeclarationOnly: true,
+    sourceMap: true,
 	},
 	configFileParsingDiagnostics: config.errors,
 });
@@ -31,6 +32,7 @@ const cjsProgram = ts.createProgram({
 		outDir: 'cjs',
 		removeComments: true,
 		module: ts.ModuleKind.CommonJS,
+    sourceMap: true,
 	},
 	configFileParsingDiagnostics: config.errors,
 });
@@ -41,6 +43,7 @@ const esmProgram = ts.createProgram({
 		outDir: 'esm',
 		removeComments: true,
 		module: ts.ModuleKind.ESNext,
+    sourceMap: true,
 	},
 	configFileParsingDiagnostics: config.errors,
 });

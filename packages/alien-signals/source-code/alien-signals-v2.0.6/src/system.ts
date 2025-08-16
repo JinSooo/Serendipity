@@ -59,13 +59,13 @@ export enum ReactiveFlags {
 	Mutable = 1 << 0,
 	/** 节点被监听 */
 	Watching = 1 << 1,
-	/** 依赖检测 */
+	/** 依赖检测（表示节点正在被递归检查，防止重复进入检查过程） */
 	RecursedCheck = 1 << 2,
-	/** 是否是递归依赖链的一部分 */
+	/** 是否是递归依赖链的一部分（表示节点是递归依赖链的一部分，用于检测和处理循环依赖） */
 	Recursed = 1 << 3,
 	/** 脏数据，需要更新 */
 	Dirty = 1 << 4,
-	/** 等待更新调度，还没执行 */
+	/** 等待更新调度，还没执行（表示节点等待更新，避免重复处理同一个节点） */
 	Pending = 1 << 5,
 }
 
@@ -128,6 +128,7 @@ export function createReactiveSystem({
 				prevSub,
 				nextSub: undefined,
 			};
+    // 双向链表插入逻辑
 		if (nextDep !== undefined) {
 			nextDep.prevDep = newLink;
 		}
@@ -143,12 +144,16 @@ export function createReactiveSystem({
 		}
 	}
 
+  /**
+   * 取消订阅依赖，sub <- dep（实现 O(1) 删除）
+   */
 	function unlink(link: Link, sub = link.sub): Link | undefined {
 		const dep = link.dep;
 		const prevDep = link.prevDep;
 		const nextDep = link.nextDep;
 		const nextSub = link.nextSub;
 		const prevSub = link.prevSub;
+    // 双向链表删除逻辑
 		if (nextDep !== undefined) {
 			nextDep.prevDep = prevDep;
 		} else {
@@ -167,11 +172,15 @@ export function createReactiveSystem({
 		if (prevSub !== undefined) {
 			prevSub.nextSub = nextSub;
 		} else if ((dep.subs = nextSub) === undefined) {
+      // 如果 dep 的订阅链表为空，则调用清理函数
 			unwatched(dep);
 		}
 		return nextDep;
 	}
 
+  /**
+   * 传播更新，通过 Link 通知所有订阅者
+   */
 	function propagate(link: Link): void {
 		let next = link.nextSub;
 		let stack: Stack<Link | undefined> | undefined;
@@ -181,23 +190,49 @@ export function createReactiveSystem({
 
 			let flags = sub.flags;
 
+      // 如果节点没有任何特殊标志，标记为 Pending
+      /**
+       * 使用条件：
+       *  - 节点是第一次访问
+       *  - 节点处于干净状态（最常见）
+       */
 			if (!(flags & 60 as ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed | ReactiveFlags.Dirty | ReactiveFlags.Pending)) {
 				sub.flags = flags | 32 satisfies ReactiveFlags.Pending;
-			} else if (!(flags & 12 as ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed)) {
+			}
+      // 如果节点正在被递归检查，重置标志
+      /**
+       * 使用条件：
+       *  - 节点正在被递归检查，但还没有被标记为递归依赖（需要重置状态，避免重复处理）
+       */
+      else if (!(flags & 12 as ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed)) {
 				flags = 0 satisfies ReactiveFlags.None;
-			} else if (!(flags & 4 satisfies ReactiveFlags.RecursedCheck)) {
+			}
+      // 如果节点是递归依赖的一部分，标记为 Pending
+      /**
+       * 使用条件：
+       *  - 节点是递归依赖链的一部分（需要清除 Recursed 标志，但保持 Pending 状态：为的是防止循环依赖）
+       */
+      else if (!(flags & 4 satisfies ReactiveFlags.RecursedCheck)) {
 				sub.flags = (flags & ~(8 satisfies ReactiveFlags.Recursed)) | 32 satisfies ReactiveFlags.Pending;
-			} else if (!(flags & 48 as ReactiveFlags.Dirty | ReactiveFlags.Pending) && isValidLink(link, sub)) {
+			}
+      // 如果节点是可变且链接有效，标记为 Recursed | Pending
+      /**
+       * 使用条件：
+       *  - 节点既不是 Dirty 也不是 Pending（当一个信号（Signal）变化时，它需要标记为 Recursed | Pending，这样它的订阅者也会被传播到）
+       */
+      else if (!(flags & 48 as ReactiveFlags.Dirty | ReactiveFlags.Pending) && isValidLink(link, sub)) {
 				sub.flags = flags | 40 as ReactiveFlags.Recursed | ReactiveFlags.Pending;
 				flags &= 1 satisfies ReactiveFlags.Mutable;
 			} else {
 				flags = 0 satisfies ReactiveFlags.None;
 			}
 
+      // 如果节点被监听，调用 notify 函数通知订阅者
 			if (flags & 2 satisfies ReactiveFlags.Watching) {
 				notify(sub);
 			}
 
+      // 如果节点是可变的且存在订阅者，则递归传播
 			if (flags & 1 satisfies ReactiveFlags.Mutable) {
 				const subSubs = sub.subs;
 				if (subSubs !== undefined) {
@@ -215,6 +250,7 @@ export function createReactiveSystem({
 				continue;
 			}
 
+      // 使用栈结构实现深度优先遍历
 			while (stack !== undefined) {
 				link = stack.value!;
 				stack = stack.prev;
@@ -228,21 +264,33 @@ export function createReactiveSystem({
 		} while (true);
 	}
 
+  /**
+   * 开启新一轮跟踪
+   */
 	function startTracking(sub: ReactiveNode): void {
 		++currentVersion;
 		sub.depsTail = undefined;
+    // 重置状态，并设置 RecursedCheck 标志，用于检测循环依赖
 		sub.flags = (sub.flags & ~(56 as ReactiveFlags.Recursed | ReactiveFlags.Dirty | ReactiveFlags.Pending)) | 4 satisfies ReactiveFlags.RecursedCheck;
 	}
 
+  /**
+   * 结束一轮跟踪
+   */
 	function endTracking(sub: ReactiveNode): void {
 		const depsTail = sub.depsTail;
 		let toRemove = depsTail !== undefined ? depsTail.nextDep : sub.deps;
+    // 清除依赖链表
 		while (toRemove !== undefined) {
 			toRemove = unlink(toRemove, sub);
 		}
+    // 重置 RecursedCheck 标志
 		sub.flags &= ~(4 satisfies ReactiveFlags.RecursedCheck);
 	}
 
+  /**
+   * 检查节点是否脏了（是否需要更新）
+   */
 	function checkDirty(link: Link, sub: ReactiveNode): boolean {
 		let stack: Stack<Link> | undefined;
 		let checkDepth = 0;
@@ -253,9 +301,12 @@ export function createReactiveSystem({
 
 			let dirty = false;
 
+      // 如果数据已经脏了，直接返回 true
 			if (sub.flags & 16 satisfies ReactiveFlags.Dirty) {
 				dirty = true;
-			} else if ((depFlags & 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty) === 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty) {
+			}
+      // 如果依赖节点是可变的且脏了，调用 update 函数更新依赖节点
+      else if ((depFlags & 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty) === 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty) {
 				if (update(dep)) {
 					const subs = dep.subs!;
 					if (subs.nextSub !== undefined) {
@@ -263,7 +314,9 @@ export function createReactiveSystem({
 					}
 					dirty = true;
 				}
-			} else if ((depFlags & 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) === 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) {
+			}
+      // 如果依赖节点是可变的且等待更新，则递归检查依赖
+      else if ((depFlags & 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) === 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) {
 				if (link.nextSub !== undefined || link.prevSub !== undefined) {
 					stack = { value: link, prev: stack };
 				}
@@ -273,6 +326,7 @@ export function createReactiveSystem({
 				continue;
 			}
 
+      // 依赖链遍历
 			if (!dirty) {
 				const nextDep = link.nextDep;
 				if (nextDep !== undefined) {
@@ -281,6 +335,7 @@ export function createReactiveSystem({
 				}
 			}
 
+      // 深度回溯处理
 			while (checkDepth) {
 				--checkDepth;
 				const firstSub = sub.subs!;
@@ -291,6 +346,7 @@ export function createReactiveSystem({
 				} else {
 					link = firstSub;
 				}
+        // 如果是脏数据，则尝试更新数据
 				if (dirty) {
 					if (update(sub)) {
 						if (hasMultipleSubs) {
@@ -302,6 +358,7 @@ export function createReactiveSystem({
 				} else {
 					sub.flags &= ~(32 satisfies ReactiveFlags.Pending);
 				}
+        // 继续处理下一个依赖
 				sub = link.sub;
 				if (link.nextDep !== undefined) {
 					link = link.nextDep;
@@ -314,6 +371,10 @@ export function createReactiveSystem({
 		} while (true);
 	}
 
+  /**
+   * 浅层传播更新，只通知订阅者，不递归检查依赖
+   * @param link 要传播的链接
+   */
 	function shallowPropagate(link: Link): void {
 		do {
 			const sub = link.sub;
@@ -329,6 +390,11 @@ export function createReactiveSystem({
 		} while (link !== undefined);
 	}
 
+  /**
+   * 检查链接是否有效
+   * @param checkLink 要检查的链接
+   * @param sub 被依赖的节点
+   */
 	function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
 		const depsTail = sub.depsTail;
 		if (depsTail !== undefined) {
