@@ -107,10 +107,17 @@ export function setCurrentScope(scope: EffectScope | undefined) {
 	return prevScope;
 }
 
+/**
+ * 开始批量更新
+ */
 export function startBatch() {
 	++batchDepth;
 }
 
+/**
+ * 结束批量更新
+ * 如果 batchDepth 为 0，则执行 flush 进行批量更新，否则等待更多的 endBatch
+ */
 export function endBatch() {
 	if (!--batchDepth) {
 		flush();
@@ -168,6 +175,11 @@ export function computed<T>(getter: (previousValue?: T) => T): () => T {
 	}) as () => T;
 }
 
+/**
+ * effect 函数，用于创建副作用
+ *  1. 在创建时会执行一次
+ *  2. 在依赖变化时会重新执行（signal changed -> propagate -> notify -> flush -> run -> re-execute）
+ */
 export function effect(fn: () => void): () => void {
 	const e: Effect = {
 		fn,
@@ -181,7 +193,9 @@ export function effect(fn: () => void): () => void {
   // 处理嵌套 effect 的情况
 	if (activeSub !== undefined) {
 		link(e, activeSub);
-	} else if (activeScope !== undefined) {
+	}
+  // 将 effect 关联到对应的 scope
+  else if (activeScope !== undefined) {
 		link(e, activeScope);
 	}
   // 这里的处理和 computed 类似，都是设置 currentSub 为 effect，然后执行 effect 的 fn 函数
@@ -194,6 +208,10 @@ export function effect(fn: () => void): () => void {
 	return effectOper.bind(e);
 }
 
+/**
+ * effectScope 函数，用于创建副作用作用域
+ * 将 scope 内部的所有 effect 作为一个单元，当执行清理函数时，会清理内部的所有 effect
+ */
 export function effectScope(fn: () => void): () => void {
 	const e: EffectScope = {
 		deps: undefined,
@@ -202,6 +220,7 @@ export function effectScope(fn: () => void): () => void {
 		subsTail: undefined,
 		flags: 0 satisfies ReactiveFlags.None,
 	};
+  // 处理嵌套 effectScope 的情况
 	if (activeScope !== undefined) {
 		link(e, activeScope);
 	}
@@ -276,6 +295,7 @@ function run(e: Effect | EffectScope, flags: ReactiveFlags): void {
 		flags & 16 satisfies ReactiveFlags.Dirty
 		|| (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(e.deps!, e))
 	) {
+    // 设置当前的 activeSub 为 effect，来进行依赖收集
 		const prev = setCurrentSub(e);
 		startTracking(e);
 		try {
@@ -354,9 +374,9 @@ function signalOper<T>(this: Signal<T>, ...value: [T]): T | void {
 			this.flags = 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty;
 			const subs = this.subs;
 			if (subs !== undefined) {
-        // 通知订阅者（依赖该信号的节点）
+        // 通知订阅者（依赖该信号的节点），将依赖添加到队列中，统一处理更新
 				propagate(subs);
-        // 如果不是批量更新，则直接刷新队列进行更新
+        // 如果 batchDepth 为 0，则直接刷新队列进行更新，反之，则进行批量更新，不在这边处理
 				if (!batchDepth) {
 					flush();
 				}
@@ -387,11 +407,11 @@ function signalOper<T>(this: Signal<T>, ...value: [T]): T | void {
 // 返回一个 disposal 函数，用于清理依赖
 function effectOper(this: Effect | EffectScope): void {
 	let dep = this.deps;
-  // 清理依赖
+  // 清理依赖（signal、computed）
 	while (dep !== undefined) {
 		dep = unlink(dep, this);
 	}
-  // 清理订阅
+  // 清理订阅（effectScope）
 	const sub = this.subs;
 	if (sub !== undefined) {
 		unlink(sub);
