@@ -419,3 +419,19 @@ function effectOper(this: Effect | EffectScope): void {
   // 清空标志位
 	this.flags = 0 satisfies ReactiveFlags.None;
 }
+
+/**
+ * untrack 根据逻辑自己实现一个不进行依赖追踪的函数，效果类似待删除的 pauseTracking
+ * @example
+ * const result = untracked(() => {
+ *   return expensiveComputation(signal1(), signal2());
+ * })
+ */
+export function untracked<T>(callback: () => T): T {
+  const currentSub = setCurrentSub(undefined);
+  try {
+      return callback();
+  } finally {
+      setCurrentSub(currentSub);
+  }
+}
