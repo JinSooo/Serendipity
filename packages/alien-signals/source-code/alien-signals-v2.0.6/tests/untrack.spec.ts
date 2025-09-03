@@ -7,6 +7,7 @@ test('should pause tracking in computed', () => {
 	let computedTriggerTimes = 0;
 	const c = computed(() => {
 		computedTriggerTimes++;
+    // 设置当前的 activeSub 为 undefined，不进行依赖收集
 		const currentSub = setCurrentSub(undefined);
 		const value = src();
 		setCurrentSub(currentSub);
@@ -28,6 +29,8 @@ test('should pause tracking in effect', () => {
 	let effectTriggerTimes = 0;
 	effect(() => {
 		effectTriggerTimes++;
+    // is 会加入到当前的 activeSub 的订阅链表中（activeSub 实际指的就是 effect）
+    // 但 src 不会加入到当前的 activeSub 的订阅链表中，因为 setCurrentSub(undefined) 设置了当前的 activeSub 为 undefined
 		if (is()) {
 			const currentSub = setCurrentSub(undefined);
 			src();

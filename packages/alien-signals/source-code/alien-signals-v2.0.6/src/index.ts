@@ -169,7 +169,8 @@ export function computed<T>(getter: (previousValue?: T) => T): () => T {
 		subsTail: undefined,
 		deps: undefined,
 		depsTail: undefined,
-    // computed 对应的标志位：Mutable 表示可变计算值，Dirty 表示脏数据（需要重新计算）(初始化时重新计算一下，后面会根据依赖变化而重新计算)
+    // computed 对应的标志位：Mutable 表示可变计算值，Dirty 表示脏数据（需要重新计算）
+    // 惰性加载，只有用到的时候才会重新计算，这里标识脏数据会进行重新计算
 		flags: 17 as ReactiveFlags.Mutable | ReactiveFlags.Dirty,
 		getter: getter as (previousValue?: unknown) => unknown,
 	}) as () => T;
@@ -340,8 +341,11 @@ function computedOper<T>(this: Computed<T>): T {
 	const flags = this.flags;
   // 检查标志位是否需要更新
 	if (
+    // 第一次进来，标志位为脏数据，则进行更新
 		flags & 16 satisfies ReactiveFlags.Dirty
-		|| (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(this.deps!, this))
+		||
+    // signal 引起的标志位更新，检查是否真的是脏数据
+    (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(this.deps!, this))
 	) {
     // 更新计算值
 		if (updateComputed(this)) {
@@ -375,6 +379,8 @@ function signalOper<T>(this: Signal<T>, ...value: [T]): T | void {
 			const subs = this.subs;
 			if (subs !== undefined) {
         // 通知订阅者（依赖该信号的节点），将依赖添加到队列中，统一处理更新
+        // propagate 的执行，只会讲其他订阅者的标志位进行更新，不会进行更新操作，来实现惰性加载
+        // 后面会进行统一的 flush 批量更新操作
 				propagate(subs);
         // 如果 batchDepth 为 0，则直接刷新队列进行更新，反之，则进行批量更新，不在这边处理
 				if (!batchDepth) {
