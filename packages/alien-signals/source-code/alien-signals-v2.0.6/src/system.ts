@@ -190,7 +190,7 @@ export function createReactiveSystem({
 
 			let flags = sub.flags;
 
-      // 如果节点没有任何特殊标志，标记为 Pending
+      // 如果节点没有任何特殊标志，标记为 Pending（惰性更新）
       /**
        * 使用条件：
        *  - 节点是第一次访问
@@ -200,6 +200,7 @@ export function createReactiveSystem({
 				sub.flags = flags | 32 satisfies ReactiveFlags.Pending;
 			}
       // 如果节点正在被递归检查，重置标志
+      // 当一个响应式节点既没有进行递归检查，也没有处于递归状态时，将其标志位重置为初始状态，避免不必要的处理。
       /**
        * 使用条件：
        *  - 节点正在被递归检查，但还没有被标记为递归依赖（需要重置状态，避免重复处理）
@@ -290,8 +291,11 @@ export function createReactiveSystem({
 
   /**
    * 检查节点是否脏了（是否需要更新）
+   * @param link 订阅节点的依赖链
+   * @param sub 订阅节点
    */
 	function checkDirty(link: Link, sub: ReactiveNode): boolean {
+    // 保存多分支情况下的链接状态栈
 		let stack: Stack<Link> | undefined;
 		let checkDepth = 0;
 
@@ -315,8 +319,9 @@ export function createReactiveSystem({
 					dirty = true;
 				}
 			}
-      // 如果依赖节点是可变的且等待更新，则递归检查依赖
+      // 如果依赖节点是可变的且等待更新，则递归检查该依赖的依赖
       else if ((depFlags & 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) === 33 as ReactiveFlags.Mutable | ReactiveFlags.Pending) {
+        // 如果当前链接还有兄弟节点需要稍后处理，就将当前链接保存到堆栈中
 				if (link.nextSub !== undefined || link.prevSub !== undefined) {
 					stack = { value: link, prev: stack };
 				}
@@ -340,6 +345,7 @@ export function createReactiveSystem({
 				--checkDepth;
 				const firstSub = sub.subs!;
 				const hasMultipleSubs = firstSub.nextSub !== undefined;
+        // 如果存在多个订阅者，则说明存在递归操作，需要从 stack 恢复之前的值
 				if (hasMultipleSubs) {
 					link = stack?.value;
 					stack = stack?.prev;

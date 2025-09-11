@@ -294,7 +294,9 @@ function run(e: Effect | EffectScope, flags: ReactiveFlags): void {
   // 如果标志位为脏数据，则更新值，并通知订阅者（依赖该信号的节点）
 	if (
 		flags & 16 satisfies ReactiveFlags.Dirty
-		|| (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(e.deps!, e))
+		||
+    // 如果处于 PENDING，并且是脏数据，也就说明，当前的 effect 依赖的节点是脏数据，需要更新
+    (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(e.deps!, e))
 	) {
     // 设置当前的 activeSub 为 effect，来进行依赖收集
 		const prev = setCurrentSub(e);
@@ -344,7 +346,7 @@ function computedOper<T>(this: Computed<T>): T {
     // 第一次进来，标志位为脏数据，则进行更新
 		flags & 16 satisfies ReactiveFlags.Dirty
 		||
-    // signal 引起的标志位更新，检查是否真的是脏数据
+    // signal 引起的标志位更新，检查是否真的是脏数据（实现懒加载，只有用到的时候才会重新计算）
     (flags & 32 satisfies ReactiveFlags.Pending && checkDirty(this.deps!, this))
 	) {
     // 更新计算值
