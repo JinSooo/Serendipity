@@ -1,4 +1,4 @@
-import { computed, signal } from "../esm/index.mjs";
+import { computed, signal, effect, startBatch, endBatch } from "../esm/index.mjs";
 
 /* ------- should correctly propagate changes through computed signals ------ */
 // const src = signal(0);
@@ -44,3 +44,42 @@ src(0);
 c1();
 // update 的时候才会更新 signal 的 previousValue，而在执行 src 的时候，只是 value 值发生了变化，previousValue 没有变化，所以不会更新
 // 最终在更新 c1 的时候，判断 value 和 previousValue 是一样的，相对来说其实 previousValue 的值是跟着 computed/effect 一起懒加载的
+
+
+function batchEffect(fn) {
+  return effect(() => {
+    startBatch();
+    try {
+      return fn();
+    } finally {
+      endBatch();
+    }
+  });
+}
+
+const logs= [];
+const a = signal(0);
+const b = signal(0);
+
+const aa = computed(() => {
+  logs.push('aa-0');
+  if (!a()) {
+    b(1);
+  }
+  logs.push('aa-1');
+});
+
+const bb = computed(() => {
+  logs.push('bb');
+  return b();
+});
+
+console.log("🚀 ~ logs:", logs)
+batchEffect(() => {
+  bb();
+});
+console.log("🚀 ~ logs2:", logs)
+batchEffect(() => {
+  aa();
+});
+console.log("🚀 ~ logs3:", logs)

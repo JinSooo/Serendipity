@@ -274,7 +274,7 @@ function notify(e: Effect | EffectScope) {
 		e.flags = flags | EffectFlags.Queued;
     // 如果 effect 有订阅者，则通知订阅者（依赖该 effect 的节点）
 		const subs = e.subs;
-    // 有 subs，说明是 signal、computed
+    // 有 subs，说明是 signal、computed 或者是 嵌套的 effect
 		if (subs !== undefined) {
       // 通知订阅者（依赖该 effect 的节点）
 			notify(subs.sub as Effect | EffectScope);

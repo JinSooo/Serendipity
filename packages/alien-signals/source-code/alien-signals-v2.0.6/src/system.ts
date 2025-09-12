@@ -281,7 +281,7 @@ export function createReactiveSystem({
 	function endTracking(sub: ReactiveNode): void {
 		const depsTail = sub.depsTail;
 		let toRemove = depsTail !== undefined ? depsTail.nextDep : sub.deps;
-    // 清除依赖链表
+    // 清除未使用依赖链表
 		while (toRemove !== undefined) {
 			toRemove = unlink(toRemove, sub);
 		}
